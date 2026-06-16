@@ -132,6 +132,31 @@ canvas { display: block; }
 
 #help { bottom: 0; left: 50%; transform: translateX(-50%); font-size: 11px; color: #707890;
   padding: 3px 10px; background: rgba(8,10,16,.6); border-radius: 6px 6px 0 0; white-space: nowrap; }
+
+/* ===== Entraîneur · Armurier · Inventaire ===== */
+.dsub { color: #9aa0b5; font-size: 12px; margin: -2px 0 10px; }
+.dbtn .sd { color: #8b93a7; font-weight: 400; font-size: 11px; }
+.dbtn.dis, .dbtn:disabled { opacity: .5; cursor: not-allowed; }
+.skill .lk.train { color: #7ee08a; }
+
+#inventory {
+  position: absolute; right: 12px; top: 70px; width: 440px; max-height: 74vh; overflow-y: auto;
+  background: rgba(12, 14, 22, .96); border: 1px solid #3a3f55; border-radius: 10px; padding: 14px; z-index: 40;
+}
+#inventory h3 { color: #f0d889; font-size: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+#inv-gold { color: #e9c46a; font-size: 13px; font-weight: 600; }
+.inv-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.inv-h { color: #c9b873; font-size: 12px; margin-bottom: 6px; border-bottom: 1px solid #2c3147; padding-bottom: 3px; }
+.inv-slot { background: #161a28; border: 1px solid #2c3147; border-radius: 7px; padding: 6px 9px; margin-bottom: 6px; }
+.inv-slot.filled { cursor: pointer; }
+.inv-slot.filled:hover { background: #1d2238; }
+.slk { font-size: 10px; color: #707890; text-transform: uppercase; letter-spacing: .5px; }
+.itn { font-size: 13px; font-weight: 600; }
+.its { font-size: 11px; color: #9aa0b5; margin-top: 1px; }
+.ite { font-size: 12px; color: #5d667e; }
+.inv-item { background: #161a28; border: 1px solid #2c3147; border-left: 4px solid #888; border-radius: 7px; padding: 6px 9px; margin-bottom: 6px; cursor: pointer; }
+.inv-item:hover { background: #1d2238; }
+.inv-tip { margin-top: 10px; font-size: 11px; color: #707890; }
 </style>
 </head>
 <body>
@@ -195,6 +220,17 @@ canvas { display: block; }
       <button class="gbtn" data-role="healer">+ Compagnon soigneur</button>
       <button class="gbtn" id="btn-pot-hp">Potion PV (T)</button>
       <button class="gbtn" id="btn-pot-pw">Potion mana (Y)</button>
+      <button class="gbtn" id="btn-inv">Inventaire (I)</button>
+      <button class="gbtn" id="btn-sound">🔊 Son (M)</button>
+    </div>
+
+    <div id="inventory" class="hidden">
+      <h3>Équipement &amp; inventaire <span id="inv-gold"></span></h3>
+      <div class="inv-cols">
+        <div><div class="inv-h">Porté</div><div id="inv-equip"></div></div>
+        <div><div class="inv-h">Sac</div><div id="inv-bag"></div></div>
+      </div>
+      <div class="inv-tip">Cliquez un objet du sac pour l'équiper, une pièce portée pour la retirer. (I pour fermer)</div>
     </div>
 
     <div id="log"></div>
@@ -209,7 +245,7 @@ canvas { display: block; }
       <button id="btn-respawn">Renaître à la capitale</button>
     </div>
 
-    <div id="help">ZQSD/WASD : se déplacer · clic : cibler · R : attaque auto · 1-6 : compétences · E : parler au PNJ · F : cible la plus proche · J : quêtes · Entrée : chat</div>
+    <div id="help">ZQSD/WASD : se déplacer · clic : cibler · R : attaque auto · 1-9 : compétences · E : parler au PNJ (entraîneur, armurier…) · F : cible · I : inventaire · J : quêtes · Entrée : chat</div>
   </div>
 
 <script type="module">
@@ -264,21 +300,27 @@ const ARCHETYPES = {
     label: 'Combattant', hp: 1.25, power: 0.6, dmg: 1.0,
     skills: [
       { t: 'melee', p: 1.6, cd: 6, cost: 5, rng: 4, lvl: 1 },
-      { t: 'stun', p: 0.8, cd: 20, cost: 10, rng: 4, dur: 3, lvl: 4 },
-      { t: 'dot', p: 0.9, cd: 12, cost: 8, rng: 4, dur: 9, lvl: 8 },
-      { t: 'buff', p: 0.25, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 12 },
-      { t: 'aoe', p: 1.5, cd: 16, cost: 14, rng: 6, lvl: 20, name: "Tourbillon d'acier" },
-      { t: 'melee', p: 3.0, cd: 25, cost: 18, rng: 4, lvl: 30, name: 'Frappe dévastatrice' },
+      { t: 'stun', p: 0.8, cd: 18, cost: 10, rng: 4, dur: 3, lvl: 2 },
+      { t: 'dot', p: 0.9, cd: 12, cost: 8, rng: 4, dur: 9, lvl: 3 },
+      { t: 'buff', p: 0.25, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 5 },
+      { t: 'melee', p: 2.0, cd: 9, cost: 10, rng: 4, lvl: 7, name: 'Brise-garde' },
+      { t: 'aoe', p: 1.5, cd: 16, cost: 14, rng: 6, lvl: 10, name: "Tourbillon d'acier" },
+      { t: 'dot', p: 1.3, cd: 14, cost: 12, rng: 4, dur: 10, lvl: 14, name: 'Entaille sanglante' },
+      { t: 'melee', p: 3.0, cd: 25, cost: 18, rng: 4, lvl: 20, name: 'Frappe dévastatrice' },
+      { t: 'aoe', p: 2.4, cd: 30, cost: 22, rng: 7, lvl: 30, name: 'Séisme martial' },
     ],
   },
   hybrid: {
     label: 'Hybride', hp: 1.1, power: 0.85, dmg: 0.9,
     skills: [
       { t: 'melee', p: 1.4, cd: 5, cost: 5, rng: 4, lvl: 1 },
-      { t: 'heal', p: 0.9, cd: 14, cost: 15, rng: 0, lvl: 4 },
-      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 8 },
-      { t: 'melee', p: 1.9, cd: 12, cost: 10, rng: 4, lvl: 12 },
-      { t: 'spell', p: 1.6, cd: 8, cost: 12, rng: 30, lvl: 20, name: 'Châtiment' },
+      { t: 'heal', p: 0.9, cd: 14, cost: 15, rng: 0, lvl: 2 },
+      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 3 },
+      { t: 'melee', p: 1.9, cd: 12, cost: 10, rng: 4, lvl: 5 },
+      { t: 'spell', p: 1.6, cd: 8, cost: 12, rng: 30, lvl: 7, name: 'Châtiment' },
+      { t: 'dot', p: 1.0, cd: 10, cost: 10, rng: 30, dur: 12, lvl: 10, name: 'Fléau persistant' },
+      { t: 'heal', p: 1.4, cd: 12, cost: 18, rng: 30, lvl: 14, name: 'Imposition des mains' },
+      { t: 'spell', p: 2.4, cd: 9, cost: 16, rng: 32, lvl: 20, name: 'Verdict sacré' },
       { t: 'buff', p: 0.45, cd: 40, cost: 16, rng: 0, dur: 20, lvl: 30, name: 'Aura de puissance' },
     ],
   },
@@ -286,31 +328,40 @@ const ARCHETYPES = {
     label: 'Soigneur', hp: 0.95, power: 1.2, dmg: 0.7,
     skills: [
       { t: 'heal', p: 1.5, cd: 3, cost: 12, rng: 30, lvl: 1 },
-      { t: 'groupheal', p: 1.0, cd: 10, cost: 22, rng: 30, lvl: 4 },
-      { t: 'spell', p: 1.1, cd: 4, cost: 8, rng: 35, lvl: 8 },
-      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 30, dur: 25, lvl: 12 },
+      { t: 'groupheal', p: 1.0, cd: 10, cost: 22, rng: 30, lvl: 2 },
+      { t: 'spell', p: 1.1, cd: 4, cost: 8, rng: 35, lvl: 3 },
+      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 30, dur: 25, lvl: 5 },
+      { t: 'heal', p: 2.2, cd: 9, cost: 22, rng: 30, lvl: 7, name: 'Grâce supérieure' },
+      { t: 'hot', p: 0.8, cd: 10, cost: 16, rng: 30, dur: 15, lvl: 10, name: 'Régénération' },
+      { t: 'root', p: 0, cd: 15, cost: 12, rng: 35, dur: 6, lvl: 14, name: 'Entraves sacrées' },
       { t: 'heal', p: 2.6, cd: 12, cost: 25, rng: 30, lvl: 20, name: 'Grâce majeure' },
-      { t: 'aoe', p: 1.6, cd: 18, cost: 20, rng: 30, lvl: 30, name: 'Châtiment céleste' },
+      { t: 'aoe', p: 1.8, cd: 18, cost: 22, rng: 32, lvl: 30, name: 'Châtiment céleste' },
     ],
   },
   caster: {
     label: 'Mage', hp: 0.8, power: 1.3, dmg: 1.0,
     skills: [
       { t: 'spell', p: 1.8, cd: 3, cost: 9, rng: 38, lvl: 1 },
-      { t: 'dot', p: 1.1, cd: 8, cost: 10, rng: 35, dur: 12, lvl: 4 },
-      { t: 'root', p: 0, cd: 15, cost: 10, rng: 35, dur: 6, lvl: 8 },
-      { t: 'aoe', p: 1.3, cd: 12, cost: 18, rng: 30, lvl: 12 },
+      { t: 'dot', p: 1.1, cd: 8, cost: 10, rng: 35, dur: 12, lvl: 2 },
+      { t: 'root', p: 0, cd: 15, cost: 10, rng: 35, dur: 6, lvl: 3 },
+      { t: 'aoe', p: 1.3, cd: 12, cost: 18, rng: 30, lvl: 5 },
+      { t: 'spell', p: 2.0, cd: 5, cost: 12, rng: 38, lvl: 7, name: 'Trait du néant' },
+      { t: 'spell', p: 1.0, cd: 2, cost: 6, rng: 38, lvl: 10, name: 'Éclat mineur' },
+      { t: 'dot', p: 1.6, cd: 12, cost: 16, rng: 35, dur: 14, lvl: 14, name: 'Malédiction rampante' },
       { t: 'spell', p: 2.6, cd: 8, cost: 16, rng: 38, lvl: 20, name: 'Frappe du néant' },
-      { t: 'aoe', p: 2.0, cd: 20, cost: 26, rng: 32, lvl: 30, name: 'Cataclysme' },
+      { t: 'aoe', p: 2.4, cd: 20, cost: 26, rng: 32, lvl: 30, name: 'Cataclysme' },
     ],
   },
   stealth: {
     label: 'Furtif', hp: 0.95, power: 0.8, dmg: 1.1,
     skills: [
       { t: 'stealth', p: 0, cd: 8, cost: 5, rng: 0, lvl: 1 },
-      { t: 'melee', p: 2.6, cd: 8, cost: 8, rng: 4, fromStealth: 2, lvl: 4 },
-      { t: 'dot', p: 1.0, cd: 10, cost: 8, rng: 4, dur: 12, lvl: 8 },
-      { t: 'buff', p: 0.3, cd: 30, cost: 10, rng: 0, dur: 15, lvl: 12 },
+      { t: 'melee', p: 2.6, cd: 8, cost: 8, rng: 4, fromStealth: 2, lvl: 2 },
+      { t: 'dot', p: 1.0, cd: 10, cost: 8, rng: 4, dur: 12, lvl: 3 },
+      { t: 'buff', p: 0.3, cd: 30, cost: 10, rng: 0, dur: 15, lvl: 5 },
+      { t: 'melee', p: 2.0, cd: 7, cost: 8, rng: 4, lvl: 7, name: 'Coup vicieux' },
+      { t: 'melee', p: 2.8, cd: 12, cost: 10, rng: 4, fromStealth: 1.8, lvl: 10, name: 'Éviscération' },
+      { t: 'root', p: 0.3, cd: 18, cost: 10, rng: 30, dur: 5, lvl: 14, name: 'Bolas' },
       { t: 'melee', p: 3.6, cd: 16, cost: 12, rng: 4, fromStealth: 2.2, lvl: 20, name: 'Lame fatale' },
       { t: 'buff', p: 0.5, cd: 40, cost: 14, rng: 0, dur: 15, lvl: 30, name: 'Danse des ombres' },
     ],
@@ -319,26 +370,31 @@ const ARCHETYPES = {
     label: 'Archer', hp: 1.0, power: 0.8, dmg: 1.0,
     skills: [
       { t: 'ranged', p: 1.7, cd: 4, cost: 6, rng: 40, lvl: 1 },
-      { t: 'ranged', p: 2.4, cd: 10, cost: 12, rng: 45, lvl: 4 },
-      { t: 'root', p: 0.4, cd: 18, cost: 10, rng: 38, dur: 5, lvl: 8 },
-      { t: 'melee', p: 1.3, cd: 6, cost: 5, rng: 4, lvl: 12 },
+      { t: 'ranged', p: 2.4, cd: 10, cost: 12, rng: 45, lvl: 2 },
+      { t: 'root', p: 0.4, cd: 18, cost: 10, rng: 38, dur: 5, lvl: 3 },
+      { t: 'melee', p: 1.3, cd: 6, cost: 5, rng: 4, lvl: 5 },
+      { t: 'ranged', p: 2.0, cd: 7, cost: 10, rng: 42, lvl: 7, name: 'Tir rapide' },
+      { t: 'ranged', p: 2.8, cd: 12, cost: 14, rng: 45, lvl: 10, name: 'Tir perforant' },
+      { t: 'dot', p: 1.2, cd: 12, cost: 12, rng: 40, dur: 10, lvl: 14, name: 'Flèche empoisonnée' },
       { t: 'aoe', p: 1.6, cd: 15, cost: 14, rng: 38, lvl: 20, name: 'Pluie de flèches' },
-      { t: 'ranged', p: 3.4, cd: 20, cost: 16, rng: 45, lvl: 30, name: 'Tir perçant' },
+      { t: 'ranged', p: 3.6, cd: 20, cost: 18, rng: 48, lvl: 30, name: 'Tir du faucon' },
     ],
   },
   support: {
     label: 'Barde', hp: 1.0, power: 1.0, dmg: 0.8,
     skills: [
       { t: 'hot', p: 0.7, cd: 8, cost: 12, rng: 30, dur: 12, lvl: 1 },
-      { t: 'buff', p: 0.35, cd: 20, cost: 10, rng: 0, dur: 15, lvl: 4 },
-      { t: 'spell', p: 1.3, cd: 4, cost: 8, rng: 32, lvl: 8 },
-      { t: 'mez', p: 0, cd: 20, cost: 14, rng: 32, dur: 6, lvl: 12 },
+      { t: 'buff', p: 0.35, cd: 20, cost: 10, rng: 0, dur: 15, lvl: 2 },
+      { t: 'spell', p: 1.3, cd: 4, cost: 8, rng: 32, lvl: 3 },
+      { t: 'mez', p: 0, cd: 20, cost: 14, rng: 32, dur: 6, lvl: 5 },
+      { t: 'groupheal', p: 0.9, cd: 12, cost: 20, rng: 30, lvl: 7, name: 'Refrain apaisant' },
+      { t: 'buff', p: 0.4, cd: 24, cost: 12, rng: 0, dur: 16, lvl: 10, name: 'Marche héroïque' },
+      { t: 'root', p: 0, cd: 16, cost: 12, rng: 32, dur: 6, lvl: 14, name: 'Note paralysante' },
       { t: 'buff', p: 0.5, cd: 30, cost: 14, rng: 0, dur: 18, lvl: 20, name: 'Hymne héroïque' },
-      { t: 'aoe', p: 1.8, cd: 18, cost: 20, rng: 30, lvl: 30, name: 'Crescendo' },
+      { t: 'aoe', p: 1.9, cd: 18, cost: 22, rng: 30, lvl: 30, name: 'Crescendo' },
     ],
   },
 };
-
 // ------------------------------------------------------------
 // Les 44 classes de Dark Age of Camelot
 // stats: str/con/dex/qui/mag (mag = stat de magie, libellé via magStat)
@@ -610,9 +666,123 @@ const MSG = {
   CREATE: 'create', MOVE: 'move', SKILL: 'skill', ATTACK: 'attack', TARGET: 'target',
   CHAT: 'chat', QUEST_ACCEPT: 'qaccept', QUEST_TURNIN: 'qturnin', BUY: 'buy', USE_ITEM: 'useitem',
   RECRUIT: 'recruit', RESPAWN: 'respawn', INTERACT: 'interact',
+  LEARN: 'learn', EQUIP: 'equip', UNEQUIP: 'unequip', SELL: 'sell',
   // serveur -> client
   WELCOME: 'welcome', STATE: 'state', EVENT: 'event', SELF: 'self', CHAT_BC: 'chatbc', DEAD: 'dead',
 };
+
+// ============================================================
+// RACES — traits morphologiques pour des avatars différenciés
+// h: échelle hauteur · w: échelle largeur · skin: couleur peau
+// ears: 'pointy' | null · beard · tusks · build: silhouette
+// ============================================================
+const RACES = {
+  // Albion
+  'Breton':     { h: 1.00, w: 1.00, skin: 0xd9b48f, build: 'norm' },
+  'Avalonien':  { h: 1.02, w: 0.90, skin: 0xe7c9a4, build: 'slim' },
+  'Highlander': { h: 1.12, w: 1.10, skin: 0xd6ad86, build: 'stocky', beard: true },
+  'Sarrasin':   { h: 1.00, w: 0.98, skin: 0xa9744a, build: 'norm' },
+  'Inconnu':    { h: 1.05, w: 0.95, skin: 0xb7c2bf, build: 'slim' },
+  'Demi-Ogre':  { h: 1.42, w: 1.42, skin: 0x8c9a6e, build: 'stocky', tusks: true },
+  // Hibernia
+  'Celte':      { h: 1.02, w: 1.00, skin: 0xe2bf98, build: 'norm' },
+  'Firbolg':    { h: 1.30, w: 1.32, skin: 0xa8b78b, build: 'stocky' },
+  'Lurikeen':   { h: 0.70, w: 0.86, skin: 0xe9c8a2, build: 'slim', ears: 'pointy' },
+  'Elfe':       { h: 1.06, w: 0.84, skin: 0xf1dac2, build: 'slim', ears: 'pointy' },
+  'Sylvan':     { h: 1.16, w: 1.12, skin: 0x70592f, build: 'stocky' },
+  'Shar':       { h: 1.10, w: 1.18, skin: 0x9aa0ab, build: 'stocky' },
+  // Midgard
+  'Norrois':    { h: 1.06, w: 1.04, skin: 0xe6c19a, build: 'norm', beard: true },
+  'Troll':      { h: 1.50, w: 1.46, skin: 0x6f9460, build: 'stocky', tusks: true },
+  'Nain':       { h: 0.78, w: 1.22, skin: 0xd9a87e, build: 'stocky', beard: true },
+  'Kobold':     { h: 0.74, w: 0.84, skin: 0x84a55c, build: 'slim', ears: 'pointy' },
+  'Valkyn':     { h: 1.00, w: 0.96, skin: 0x6e604c, build: 'slim', ears: 'pointy' },
+  'Frostalf':   { h: 1.04, w: 0.90, skin: 0xc2e3f0, build: 'slim', ears: 'pointy' },
+};
+const raceTraits = (name) => RACES[name] || { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
+
+// ============================================================
+// SORTS — coût d'apprentissage chez l'entraîneur (or)
+// ============================================================
+const skillCost = (lvl) => Math.round(15 + (Math.max(1, lvl) - 1) * 16);
+
+// ============================================================
+// ÉQUIPEMENT & LOOT
+// ============================================================
+const EQUIP_SLOTS = ['weapon', 'head', 'chest', 'feet', 'ring', 'amulet'];
+const SLOT_LABELS = { weapon: 'Arme', head: 'Casque', chest: 'Armure', feet: 'Bottes', ring: 'Anneau', amulet: 'Amulette' };
+
+// classe d'armure portée selon l'archétype
+const WEIGHT_BY_ARCH = {
+  tank: 'lourde', hybrid: 'moyenne', healer: 'moyenne', support: 'moyenne',
+  archer: 'moyenne', caster: 'légère', stealth: 'légère',
+};
+const weightOfArch = (arch) => WEIGHT_BY_ARCH[arch] || 'moyenne';
+
+const RARITIES = [
+  { id: 'commun', label: 'Commun', mult: 1.0, color: '#c8ccd8', w: 60 },
+  { id: 'rare', label: 'Rare', mult: 1.4, color: '#5aa9e6', w: 27 },
+  { id: 'epique', label: 'Épique', mult: 1.9, color: '#b96be0', w: 10 },
+  { id: 'legendaire', label: 'Légendaire', mult: 2.6, color: '#f0a93a', w: 3 },
+];
+const rarityById = (id) => RARITIES.find((r) => r.id === id) || RARITIES[0];
+
+const ARMOR_BASE = { 'légère': 4, 'moyenne': 7, 'lourde': 11 };
+const PIECE_FACTOR = { chest: 1.5, head: 0.9, feet: 0.7 };
+const WEAPON_NAMES = ['Lame', 'Hache', 'Masse', 'Dague', 'Bâton', 'Fléau', 'Lance'];
+const ARMOR_MAT = { 'légère': 'de cuir', 'moyenne': 'de mailles', 'lourde': 'de plaques' };
+const SLOT_BASE = {
+  weapon: WEAPON_NAMES,
+  head: ['Heaume', 'Casque', 'Coiffe', 'Capuche'],
+  chest: ['Plastron', 'Cuirasse', 'Cotte', 'Harnois'],
+  feet: ['Bottes', 'Jambières', 'Solerets', 'Grèves'],
+  ring: ['Anneau', 'Bague', 'Chevalière'],
+  amulet: ['Amulette', 'Pendentif', 'Talisman'],
+};
+const RARITY_ADJ = { commun: '', rare: "de l'aguerri", epique: 'runique', legendaire: 'des Anciens' };
+
+const pickFrom = (arr, rnd) => arr[Math.floor(rnd() * arr.length)];
+
+// Génère un objet d'équipement. rnd = générateur [0,1) (Math.random par défaut).
+function genItem({ id, slot, lvl, rarity = 'commun', weight = 'moyenne', rnd = Math.random }) {
+  const R = rarityById(rarity);
+  const L = Math.max(1, lvl | 0);
+  const sb = (base) => Math.max(1, Math.round(base * (1 + L * 0.22) * R.mult));
+  const it = { id, slot, lvl: L, rarity, weight: null, name: '', dmg: 0, armor: 0, stats: {}, hp: 0, power: 0, value: 0 };
+  const base = pickFrom(SLOT_BASE[slot], rnd);
+  const adj = RARITY_ADJ[rarity];
+
+  if (slot === 'weapon') {
+    it.dmg = +( (2.4 + L * 0.7) * R.mult ).toFixed(1);
+    it.stats.str = sb(1); it.stats.dex = sb(1);
+    it.name = `${base} ${adj || 'de combat'}`.trim();
+  } else if (slot === 'ring' || slot === 'amulet') {
+    it.stats.mag = sb(1); it.stats.qui = sb(1);
+    it.power = sb(4); it.hp = sb(3);
+    it.name = `${base} ${adj || 'gravé'}`.trim();
+  } else { // pièces d'armure
+    it.weight = weight;
+    it.armor = Math.round((ARMOR_BASE[weight] + L * 0.8) * (PIECE_FACTOR[slot] || 1) * R.mult);
+    it.stats.con = sb(2);
+    if (slot === 'chest') it.hp = sb(5);
+    it.name = `${base} ${ARMOR_MAT[weight]}${adj ? ' ' + adj : ''}`.trim();
+  }
+  it.value = Math.max(5, Math.round((it.dmg * 6 + it.armor * 2 + (it.hp + it.power) * 0.5 + 4) * (1 + L * 0.3)));
+  return it;
+}
+
+// Agrège les bonus de toutes les pièces équipées d'un joueur.
+function gearBonus(equip) {
+  const out = { str: 0, con: 0, dex: 0, qui: 0, mag: 0, hp: 0, power: 0, armor: 0, dmg: 0 };
+  if (!equip) return out;
+  for (const slot of EQUIP_SLOTS) {
+    const it = equip[slot];
+    if (!it) continue;
+    for (const k of ['str', 'con', 'dex', 'qui', 'mag']) out[k] += (it.stats && it.stats[k]) || 0;
+    out.hp += it.hp || 0; out.power += it.power || 0; out.armor += it.armor || 0; out.dmg += it.dmg || 0;
+  }
+  return out;
+}
 // ============================================================
 // Collisions & décor déterministe (partagé client/serveur)
 // Le décor est généré avec un PRNG seedé : client (rendu) et
@@ -806,6 +976,7 @@ class Game {
     if (!this.storage || !p || p.kind !== 'player') return;
     this.saves[this.saveKey(p)] = {
       lvl: p.lvl, xp: p.xp, gold: p.gold, items: p.items, quests: p.quests,
+      learned: p.learned, equip: p.equip, bag: p.bag,
       x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, ts: now(),
     };
     this.savesDirty = true;
@@ -816,16 +987,122 @@ class Game {
     try { this.storage.save(this.saves); this.savesDirty = false; } catch (e) { console.error('save error', e); }
   }
 
+  // ============ STATS, SORTS & ÉQUIPEMENT ============
+  // Recalcule PV/puissance max en intégrant les bonus d'équipement.
+  recalcVitals(p) {
+    const cls = classById(p.cls);
+    if (!cls) return;
+    const gb = gearBonus(p.equip);
+    const hpPct = p.maxHp ? p.hp / p.maxHp : 1;
+    const pwPct = p.maxPower ? p.power / p.maxPower : 1;
+    p.maxHp = Math.round(maxHp(cls, p.lvl) + gb.con * 4 + gb.hp);
+    p.maxPower = Math.round(maxPower(cls, p.lvl) + gb.mag * 2 + gb.power);
+    p.hp = Math.min(p.maxHp, Math.round(p.maxHp * hpPct));
+    p.power = Math.min(p.maxPower, Math.round(p.maxPower * pwPct));
+  }
+
+  // Liste des compétences de la classe pour l'entraîneur (état d'apprentissage inclus).
+  trainerData(p) {
+    const cls = classById(p.cls);
+    return ARCHETYPES[cls.arch].skills.map((sk, slot) => ({
+      slot, name: sk.name || cls.sk[slot] || `Compétence ${slot + 1}`,
+      t: sk.t, lvl: sk.lvl || 1, cd: sk.cd, cost: sk.cost,
+      gold: skillCost(sk.lvl || 1),
+      learned: (p.learned || []).includes(slot),
+    }));
+  }
+
+  onLearn(session, slot) {
+    const p = session.player; if (!p) return;
+    if (!this.npcNear(p, 'trainer')) { this.eventTo(p, "Allez voir l'entraîneur de votre capitale (E).", 'info'); return; }
+    const cls = classById(p.cls);
+    const sk = ARCHETYPES[cls.arch].skills[slot];
+    if (!sk) return;
+    if ((p.learned || []).includes(slot)) { this.eventTo(p, 'Compétence déjà apprise.', 'info'); return; }
+    if (p.lvl < (sk.lvl || 1)) { this.eventTo(p, `Niveau ${sk.lvl} requis pour cette technique.`, 'info'); return; }
+    const cost = skillCost(sk.lvl || 1);
+    if (p.gold < cost) { this.eventTo(p, `Il vous faut ${cost} or pour l'apprendre.`, 'info'); return; }
+    p.gold -= cost; p.learned.push(slot);
+    const name = sk.name || cls.sk[slot] || `Compétence ${slot + 1}`;
+    this.send(session, MSG.EVENT, { text: `Nouvelle compétence apprise : ${name} ! (-${cost} or)`, cat: 'system', trainer: this.trainerData(p) });
+    this.sendSelf(p);
+  }
+
+  // Stock de base de l'armurier, adapté à la classe d'armure du joueur.
+  armorerStock(p) {
+    const cls = classById(p.cls);
+    const w = weightOfArch(cls.arch);
+    const lvl = Math.max(1, p.lvl);
+    const out = [];
+    out.push(genItem({ id: uid(), slot: 'weapon', lvl, rarity: 'commun' }));
+    out.push(genItem({ id: uid(), slot: 'head', lvl, rarity: 'commun', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'chest', lvl, rarity: 'commun', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'feet', lvl, rarity: 'commun', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'ring', lvl, rarity: 'commun' }));
+    out.push(genItem({ id: uid(), slot: 'amulet', lvl, rarity: 'commun' }));
+    out.push(genItem({ id: uid(), slot: 'chest', lvl, rarity: 'rare', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'weapon', lvl, rarity: 'rare' }));
+    return out;
+  }
+
+  onEquip(session, idx) {
+    const p = session.player; if (!p || p.dead) return;
+    const it = p.bag[idx]; if (!it) return;
+    const cls = classById(p.cls);
+    if (it.weight && it.weight !== weightOfArch(cls.arch)) {
+      this.eventTo(p, `Votre classe ne peut porter que l'armure ${weightOfArch(cls.arch)}.`, 'info'); return;
+    }
+    if (p.lvl < (it.lvl || 1)) { this.eventTo(p, `Niveau ${it.lvl} requis pour équiper ${it.name}.`, 'info'); return; }
+    p.bag.splice(idx, 1);
+    const prev = p.equip[it.slot];
+    p.equip[it.slot] = it;
+    if (prev) p.bag.push(prev);
+    this.recalcVitals(p);
+    this.eventTo(p, `Équipé : ${it.name}.`, 'loot');
+    this.sendSelf(p);
+  }
+
+  onUnequip(session, slot) {
+    const p = session.player; if (!p) return;
+    const it = p.equip[slot]; if (!it) return;
+    if (p.bag.length >= 24) { this.eventTo(p, 'Inventaire plein.', 'info'); return; }
+    p.equip[slot] = null; p.bag.push(it);
+    this.recalcVitals(p);
+    this.eventTo(p, `Retiré : ${it.name}.`, 'info');
+    this.sendSelf(p);
+  }
+
+  rollRarity() {
+    const total = RARITIES.reduce((s, r) => s + r.w, 0);
+    let x = Math.random() * total;
+    for (const r of RARITIES) { if ((x -= r.w) <= 0) return r.id; }
+    return 'commun';
+  }
+
+  maybeDropLoot(player, mobLvl, chance) {
+    if (!player || player.kind !== 'player') return;
+    if (Math.random() > chance) return;
+    if (player.bag.length >= 24) { this.eventTo(player, 'Butin perdu : inventaire plein !', 'info'); return; }
+    const slot = pick(EQUIP_SLOTS);
+    const cls = classById(player.cls);
+    const weight = ['head', 'chest', 'feet'].includes(slot) ? weightOfArch(cls.arch) : 'moyenne';
+    const it = genItem({ id: uid(), slot, lvl: Math.max(1, mobLvl), rarity: this.rollRarity(), weight });
+    player.bag.push(it);
+    this.send(player.session, MSG.EVENT, { text: `✦ Butin : ${it.name} [${it.rarity}] !`, cat: 'loot', loot: it });
+    this.sendSelf(player);
+  }
+
   // ============ MONDE INITIAL ============
   spawnWorld() {
     for (const r of REALM_IDS) {
       const base = REALMS[r].base;
       const T = capitalTransform(r); // place les PNJ dans la cour, alignés avec les murailles
       // PNJ de la capitale
-      const pt = T(14, -6), pm = T(-14, -6), pq = T(0, -14);
+      const pt = T(14, -6), pm = T(-14, -6), pq = T(0, -14), pa = T(30, 4);
       this.spawnNpc(r, 'trainer', `Entraîneur de ${REALMS[r].capital}`, pt.x, pt.z);
       this.spawnNpc(r, 'merchant', `Marchand de ${REALMS[r].capital}`, pm.x, pm.z);
       this.spawnNpc(r, 'questgiver', `Émissaire de ${REALMS[r].capital}`, pq.x, pq.z);
+      this.spawnNpc(r, 'armorer', `Armurier de ${REALMS[r].capital}`, pa.x, pa.z);
       // Gardes de la capitale
       for (let i = 0; i < 4; i++) {
         const pg = T((i - 1.5) * 16, -38);
@@ -892,7 +1169,7 @@ class Game {
     const base = REALMS[realm].base;
     const sx = base.x * 0.35 + rand(-40, 40), sz = base.z * 0.35 + rand(-40, 40);
     const e = {
-      id: uid(), kind: 'ai', name: aiName(realm), realm, cls: cls.id, arch: cls.arch,
+      id: uid(), kind: 'ai', name: aiName(realm), realm, race: pick(cls.races), cls: cls.id, arch: cls.arch,
       lvl, x: sx, z: sz, ry: 0, home: { x: sx, z: sz },
       hp: maxHp(cls, lvl), maxHp: maxHp(cls, lvl),
       power: maxPower(cls, lvl), maxPower: maxPower(cls, lvl),
@@ -993,6 +1270,9 @@ class Game {
       case MSG.USE_ITEM: this.onUseItem(session, m.id); break;
       case MSG.RECRUIT: this.onRecruit(session, m.role); break;
       case MSG.RESPAWN: this.onRespawn(session); break;
+      case MSG.LEARN: this.onLearn(session, m.slot); break;
+      case MSG.EQUIP: this.onEquip(session, m.idx); break;
+      case MSG.UNEQUIP: this.onUnequip(session, m.slot); break;
     }
   }
 
@@ -1007,6 +1287,9 @@ class Game {
     const p = {
       id: uid(), kind: 'player', name, realm: m.realm, race, cls: cls.id, arch: cls.arch,
       lvl, xp: 0, gold: 50, items: { potion_hp: 1, potion_pw: 1 },
+      learned: [0], // slots de compétences apprises (slot 0 = attaque de base, offert)
+      equip: { weapon: null, head: null, chest: null, feet: null, ring: null, amulet: null },
+      bag: [], // inventaire d'objets ramassés
       x: base.x + rand(-8, 8), z: base.z + rand(-8, 8), ry: 0,
       hp: maxHp(cls, lvl), maxHp: maxHp(cls, lvl),
       power: maxPower(cls, lvl), maxPower: maxPower(cls, lvl),
@@ -1025,10 +1308,12 @@ class Game {
       p.gold = sv.gold ?? p.gold;
       p.items = sv.items || p.items;
       p.quests = sv.quests || {};
-      p.maxHp = maxHp(cls, p.lvl); p.hp = p.maxHp;
-      p.maxPower = maxPower(cls, p.lvl); p.power = p.maxPower;
+      if (Array.isArray(sv.learned) && sv.learned.length) p.learned = sv.learned;
+      if (sv.equip) for (const s of EQUIP_SLOTS) p.equip[s] = sv.equip[s] || null;
+      if (Array.isArray(sv.bag)) p.bag = sv.bag;
       if (typeof sv.x === 'number' && typeof sv.z === 'number') { p.x = sv.x; p.z = sv.z; }
     }
+    this.recalcVitals(p); p.hp = p.maxHp; p.power = p.maxPower;
     session.player = p;
     this.entities.set(p.id, p);
     if (restored) this.send(session, MSG.EVENT, { text: `Bon retour, ${name} ! Personnage restauré (niveau ${p.lvl}, ${p.gold} or).`, cat: 'system' });
@@ -1045,11 +1330,12 @@ class Game {
     if (!p.session) return;
     this.send(p.session, MSG.SELF, {
       self: {
-        id: p.id, name: p.name, realm: p.realm, cls: p.cls, lvl: p.lvl,
+        id: p.id, name: p.name, realm: p.realm, race: p.race, cls: p.cls, lvl: p.lvl,
         xp: p.xp, xpNext: xpForLevel(p.lvl + 1), gold: p.gold, items: p.items,
         hp: p.hp, maxHp: p.maxHp, power: p.power, maxPower: p.maxPower,
         quests: p.quests, stealthed: p.stealthed, dead: p.dead,
         cooldowns: p.cooldowns,
+        learned: p.learned, equip: p.equip, bag: p.bag,
       },
     });
   }
@@ -1068,10 +1354,13 @@ class Game {
     if (e.realm !== p.realm) { this.send(session, MSG.EVENT, { text: 'Ce PNJ ne vous comprend pas.', cat: 'info' }); return; }
     if (e.role === 'trainer') {
       p.hp = p.maxHp; p.power = p.maxPower;
-      this.send(session, MSG.EVENT, { text: `${e.name} : « Reposez-vous, champion. Vous voilà requinqué ! »`, cat: 'npc' });
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Voici les techniques de votre voie. Étudiez, et elles seront vôtres. »`, cat: 'npc', trainer: this.trainerData(p) });
       this.sendSelf(p);
     } else if (e.role === 'merchant') {
-      this.send(session, MSG.EVENT, { text: `${e.name} : « Potions fraîches ! 20 pièces d'or pièce. »`, cat: 'npc', shop: SHOP });
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Potions fraîches ! »`, cat: 'npc', shop: SHOP });
+    } else if (e.role === 'armorer') {
+      session.armory = this.armorerStock(p);
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Armes et armures de qualité pour les braves de ${REALMS[p.realm].name}. »`, cat: 'npc', armory: session.armory });
     } else if (e.role === 'questgiver') {
       const qs = QUESTS[p.realm].map((q) => ({ ...q, state: p.quests[q.id] || null }));
       this.send(session, MSG.EVENT, { text: `${e.name} : « ${REALMS[p.realm].name} a besoin de vous ! »`, cat: 'npc', quests: qs });
@@ -1101,13 +1390,29 @@ class Game {
 
   onBuy(session, itemId) {
     const p = session.player;
+    // potions chez le marchand
     const item = SHOP.find((i) => i.id === itemId);
-    if (!item || !this.npcNear(p, 'merchant')) return;
-    if (p.gold < item.price) { this.send(session, MSG.EVENT, { text: "Pas assez d'or !", cat: 'info' }); return; }
-    p.gold -= item.price;
-    p.items[itemId] = (p.items[itemId] || 0) + 1;
-    this.send(session, MSG.EVENT, { text: `Achat : ${item.name}`, cat: 'info' });
-    this.sendSelf(p);
+    if (item) {
+      if (!this.npcNear(p, 'merchant')) return;
+      if (p.gold < item.price) { this.send(session, MSG.EVENT, { text: "Pas assez d'or !", cat: 'info' }); return; }
+      p.gold -= item.price;
+      p.items[itemId] = (p.items[itemId] || 0) + 1;
+      this.send(session, MSG.EVENT, { text: `Achat : ${item.name}`, cat: 'info' });
+      this.sendSelf(p);
+      return;
+    }
+    // équipement chez l'armurier
+    const gear = (session.armory || []).find((i) => i.id === itemId);
+    if (gear) {
+      if (!this.npcNear(p, 'armorer')) return;
+      if (p.gold < gear.value) { this.eventTo(p, "Pas assez d'or !", 'info'); return; }
+      if (p.bag.length >= 24) { this.eventTo(p, 'Inventaire plein.', 'info'); return; }
+      p.gold -= gear.value;
+      p.bag.push({ ...gear, id: uid() });
+      session.armory = session.armory.filter((i) => i.id !== itemId);
+      this.send(session, MSG.EVENT, { text: `Achat : ${gear.name}`, cat: 'loot', armory: session.armory });
+      this.sendSelf(p);
+    }
   }
 
   onUseItem(session, itemId) {
@@ -1155,6 +1460,7 @@ class Game {
     const cls = classById(p.cls);
     const sk = ARCHETYPES[cls.arch].skills[slot];
     if (!sk) return;
+    if (!(p.learned || []).includes(slot)) { this.eventTo(p, "Compétence non apprise — voir l'entraîneur (E)."); return; }
     if (p.lvl < (sk.lvl || 1)) { this.eventTo(p, `Compétence apprise au niveau ${sk.lvl}.`); return; }
     const key = 's' + slot;
     const t = now();
@@ -1254,9 +1560,15 @@ class Game {
   damageOf(e, type, mult) {
     const cls = e.cls ? classById(e.cls) : null;
     const archDmg = cls ? ARCHETYPES[cls.arch].dmg : 1;
+    const gb = e.kind === 'player' ? gearBonus(e.equip) : null;
     let stat = 50;
-    if (cls) stat = type === 'melee' ? cls.stats.str : type === 'ranged' ? cls.stats.dex : cls.stats.mag;
+    if (cls) {
+      const base = type === 'melee' ? cls.stats.str : type === 'ranged' ? cls.stats.dex : cls.stats.mag;
+      const gs = gb ? (type === 'melee' ? gb.str : type === 'ranged' ? gb.dex : gb.mag) : 0;
+      stat = base + gs;
+    }
     let dmg = (10 + e.lvl * 2.4) * mult * archDmg * (1 + stat / 250);
+    if (gb && (type === 'melee' || type === 'ranged')) dmg += gb.dmg * mult * 0.8; // bonus de l'arme équipée
     const buff = (e.effects || []).find((f) => f.t === 'buff' && f.until > now());
     if (buff) dmg *= 1 + buff.dmgBonus;
     return Math.floor(dmg * rand(0.85, 1.15));
@@ -1276,6 +1588,11 @@ class Game {
 
   dealDamage(src, tgt, dmg, label) {
     if (tgt.dead) return;
+    // mitigation par l'armure équipée (joueurs)
+    if (tgt.kind === 'player' && tgt.equip) {
+      const armor = gearBonus(tgt.equip).armor;
+      if (armor > 0) { const mit = armor / (armor + 90 + tgt.lvl * 7); dmg = Math.max(1, Math.round(dmg * (1 - mit))); }
+    }
     tgt.hp -= dmg;
     tgt.lastCombat = now();
     src.lastCombat = now();
@@ -1302,6 +1619,7 @@ class Game {
         const gold = irand(2, 6) * victim.lvl;
         credit.gold += gold;
         this.eventTo(credit, `Vous avez vaincu ${victim.name} (+${gold} or).`, 'loot');
+        this.maybeDropLoot(credit, victim.lvl, 0.35);
         this.questCredit(credit, victim.mobType);
       }
     } else if (victim.kind === 'ai' || victim.kind === 'player') {
@@ -1310,6 +1628,7 @@ class Game {
         this.gainXp(credit, 60 * victim.lvl);
         this.eventTo(credit, `☠ Vous avez tué ${victim.name} de ${REALMS[victim.realm].name} ! (+points de royaume)`, 'rvr');
         this.questCredit(credit, '__enemy');
+        this.maybeDropLoot(credit, victim.lvl, 0.5);
         this.broadcastEvent(`${credit.name} a tué ${victim.name} (${REALMS[victim.realm].name}) à la frontière !`, 'rvr', credit.realm);
       }
       if (victim.kind === 'player' && victim.session) {
@@ -1344,13 +1663,12 @@ class Game {
     while (p.lvl < MAX_LEVEL && p.xp >= xpForLevel(p.lvl + 1)) {
       p.lvl++;
       const cls = classById(p.cls);
-      p.maxHp = maxHp(cls, p.lvl); p.hp = p.maxHp;
-      p.maxPower = maxPower(cls, p.lvl); p.power = p.maxPower;
+      this.recalcVitals(p); p.hp = p.maxHp; p.power = p.maxPower;
       this.eventTo(p, `★ NIVEAU ${p.lvl} ! Vous vous sentez plus puissant.`, 'levelup');
-      // nouvelle compétence débloquée à ce niveau ?
+      // nouvelle(s) technique(s) disponible(s) à l'entraînement ?
       const skills = ARCHETYPES[cls.arch].skills;
-      const ni = skills.findIndex((s) => (s.lvl || 1) === p.lvl);
-      if (ni >= 0) this.eventTo(p, `📜 Nouvelle compétence apprise : ${skills[ni].name || cls.sk[ni]} !`, 'levelup');
+      const avail = skills.filter((s) => (s.lvl || 1) === p.lvl).length;
+      if (avail) this.eventTo(p, "📜 Nouvelle(s) technique(s) à apprendre chez l'entraîneur !", 'levelup');
       this.persistPlayer(p);
       // les compagnons suivent le niveau
       for (const e of this.entities.values()) {
@@ -1618,6 +1936,7 @@ class Game {
           e.id, e.kind, e.name, e.realm || '', e.cls || e.mobType || '', e.lvl,
           Math.round(e.x * 10) / 10, Math.round(e.z * 10) / 10, Math.round((e.ry || 0) * 100) / 100,
           Math.round((e.hp / e.maxHp) * 100), e.dead ? 1 : 0, e.kind === 'npc' ? e.role : '',
+          e.race || '',
         ]);
       }
       this.send(s, MSG.STATE, {
@@ -1668,9 +1987,29 @@ addEventListener('beforeunload', () => {
   for (const s of game.sessions) if (s.player) game.persistPlayer(s.player);
   game.flushSaves();
 });
-// HUD : barres, journal, quêtes, dialogues PNJ, barre de compétences
+// HUD : barres, journal, quêtes, dialogues PNJ, barre de compétences,
+// entraîneur (apprentissage), armurier et inventaire/équipement.
 
 const $ = (id) => document.getElementById(id);
+
+const TYPE_LABEL = {
+  melee: 'Mêlée', ranged: 'Tir', spell: 'Sort', dot: 'Poison/Feu', aoe: 'Zone',
+  stun: 'Étourdissement', root: 'Immobilisation', mez: 'Hypnose', heal: 'Soin',
+  groupheal: 'Soin de groupe', hot: 'Régénération', buff: 'Amélioration', stealth: 'Furtivité',
+};
+const rarityColor = (id) => rarityById(id).color;
+
+function itemStatsText(it) {
+  const parts = [];
+  if (it.dmg) parts.push(`Dégâts +${it.dmg}`);
+  if (it.armor) parts.push(`Armure +${it.armor}`);
+  const S = it.stats || {};
+  const L = { str: 'For', con: 'Con', dex: 'Dex', qui: 'Viv', mag: 'Mag' };
+  for (const k of ['str', 'con', 'dex', 'qui', 'mag']) if (S[k]) parts.push(`${L[k]} +${S[k]}`);
+  if (it.hp) parts.push(`PV +${it.hp}`);
+  if (it.power) parts.push(`Pui +${it.power}`);
+  return parts.join(' · ');
+}
 
 class UI {
   constructor(net) {
@@ -1678,10 +2017,16 @@ class UI {
     this.self = null;
     this.cls = null;
     this.cooldowns = {};
+    this.learned = [0];
+    this.equip = {};
+    this.bag = [];
 
     $('btn-respawn').onclick = () => { net.send(MSG.RESPAWN); $('deathscreen').classList.add('hidden'); };
     $('btn-pot-hp').onclick = () => net.send(MSG.USE_ITEM, { id: 'potion_hp' });
     $('btn-pot-pw').onclick = () => net.send(MSG.USE_ITEM, { id: 'potion_pw' });
+    const invBtn = $('btn-inv'); if (invBtn) invBtn.onclick = () => this.toggleInventory();
+    const sndBtn = $('btn-sound');
+    if (sndBtn) sndBtn.onclick = () => { const m = Sound.toggle(); sndBtn.textContent = m ? '🔇 Son (M)' : '🔊 Son (M)'; };
     document.querySelectorAll('.gbtn[data-role]').forEach((b) => {
       b.onclick = () => net.send(MSG.RECRUIT, { role: b.dataset.role });
     });
@@ -1721,6 +2066,7 @@ class UI {
   setIdentity(self) {
     this.cls = classById(self.cls);
     this.lvl = self.lvl || 1;
+    if (Array.isArray(self.learned)) this.learned = self.learned;
     $('selfname').textContent = `${self.name} — ${this.cls.name} (${REALMS[self.realm].name})`;
     this.buildSkillbar();
     this.updateQuestLog(self.quests || {});
@@ -1728,15 +2074,18 @@ class UI {
 
   setSelf(me) {
     this.self = me;
-    if (me.lvl && me.lvl !== this.lvl) {
-      this.lvl = me.lvl;
-      if (this.cls) this.buildSkillbar(); // déblocage de compétences
-    }
+    let needSkillbar = false;
+    if (me.lvl && me.lvl !== this.lvl) { this.lvl = me.lvl; needSkillbar = true; }
+    if (Array.isArray(me.learned) && me.learned.join() !== this.learned.join()) { this.learned = me.learned; needSkillbar = true; }
+    if (me.equip) this.equip = me.equip;
+    if (me.bag) this.bag = me.bag;
+    if (needSkillbar && this.cls) this.buildSkillbar();
+    if ((me.equip || me.bag) && !$('inventory').classList.contains('hidden')) this.renderInventory();
+
     $('hpfill').style.width = (me.hp / me.maxHp * 100) + '%';
     $('hptext').textContent = `${Math.max(0, Math.floor(me.hp))} / ${me.maxHp}`;
     $('pwfill').style.width = (me.power / me.maxPower * 100) + '%';
     $('pwtext').textContent = `${Math.floor(me.power)} / ${me.maxPower}`;
-    const prev = 0; // xp du niveau courant simplifiée
     $('xpfill').style.width = Math.min(100, me.xp / me.xpNext * 100) + '%';
     $('xptext').textContent = `Niv. ${me.lvl}`;
     $('goldtext').textContent = `💰 ${me.gold} or`;
@@ -1761,20 +2110,27 @@ class UI {
     } else wrap.classList.add('hidden');
   }
 
+  // ---- barre de compétences (verrouillée tant que non apprise) ----
   buildSkillbar() {
     const bar = $('skillbar');
     bar.innerHTML = '';
     const arch = ARCHETYPES[this.cls.arch];
     const lvl = this.lvl || 1;
     arch.skills.forEach((sk, i) => {
-      const name = sk.name || this.cls.sk[i];
-      const locked = lvl < (sk.lvl || 1);
+      const name = sk.name || this.cls.sk[i] || `Compétence ${i + 1}`;
+      const known = this.learned.includes(i);
       const d = document.createElement('div');
-      d.className = 'skill' + (locked ? ' locked' : '');
-      d.innerHTML = `<span class="key">${i + 1}</span><span class="nm">${name}</span>` +
-        (locked ? `<span class="lk">Niv. ${sk.lvl}</span>` : '');
-      d.title = locked ? `${name} — débloquée au niveau ${sk.lvl}` : `${name} — recharge ${sk.cd}s`;
-      d.onclick = () => { if (!locked) this.net.send(MSG.SKILL, { slot: i }); };
+      d.className = 'skill' + (known ? '' : ' locked');
+      let badge = '';
+      if (!known) badge = lvl < (sk.lvl || 1) ? `<span class="lk">Niv. ${sk.lvl}</span>` : `<span class="lk train">À apprendre</span>`;
+      d.innerHTML = `<span class="key">${i + 1}</span><span class="nm">${name}</span>${badge}`;
+      d.title = known
+        ? `${name} — ${TYPE_LABEL[sk.t] || sk.t} · recharge ${sk.cd}s · coût ${sk.cost}`
+        : (lvl < (sk.lvl || 1) ? `${name} — niveau ${sk.lvl} requis` : `${name} — à apprendre chez l'entraîneur (E)`);
+      d.onclick = () => {
+        if (known) { this.net.send(MSG.SKILL, { slot: i }); Sound.play('cast'); }
+        else this.log("Compétence non apprise — rendez-vous chez l'entraîneur de votre capitale (E).", 'info');
+      };
       d.dataset.slot = i;
       bar.appendChild(d);
     });
@@ -1814,27 +2170,61 @@ class UI {
     if (!any) el.innerHTML = '<div style="color:#707890;font-size:12px">Aucune quête. Parlez à l\'émissaire de votre capitale (touche E).</div>';
   }
 
+  // ---- dialogues ----
   showDialog(html, buttons) {
     const d = $('dialog');
     d.classList.remove('hidden');
     d.innerHTML = html;
     for (const b of buttons) {
       const btn = document.createElement('button');
-      btn.className = 'dbtn' + (b.close ? ' close' : '');
+      btn.className = 'dbtn' + (b.close ? ' close' : '') + (b.disabled ? ' dis' : '');
       btn.innerHTML = b.label;
-      btn.onclick = () => { if (b.fn) b.fn(); if (b.close || b.closeAfter) d.classList.add('hidden'); };
+      if (b.disabled) btn.disabled = true;
+      btn.onclick = () => { Sound.play('click'); if (b.fn) b.fn(); if (b.close || b.closeAfter) d.classList.add('hidden'); };
       d.appendChild(btn);
     }
   }
 
   showShop(shop) {
-    this.showDialog('<h3>Marchand</h3>', [
+    this.showDialog('<h3>🧪 Marchand</h3>', [
       ...shop.map((i) => ({
         label: `${i.name} — ${i.price} or`,
         fn: () => this.net.send(MSG.BUY, { id: i.id }),
       })),
       { label: 'Fermer', close: true },
     ]);
+  }
+
+  showTrainer(skills) {
+    const gold = this.self ? this.self.gold : 0;
+    const lvl = this.lvl || 1;
+    const rows = skills.map((s) => {
+      if (s.learned) return { label: `✓ ${s.name} <span class="sd">(${TYPE_LABEL[s.t] || s.t})</span> — apprise`, disabled: true };
+      if (lvl < s.lvl) return { label: `🔒 ${s.name} <span class="sd">(niv. ${s.lvl} requis)</span>`, disabled: true };
+      const afford = gold >= s.gold;
+      return {
+        label: `${afford ? '📘' : '💰'} ${s.name} <span class="sd">(${TYPE_LABEL[s.t] || s.t}) — ${s.gold} or</span>`,
+        disabled: !afford,
+        fn: () => this.net.send(MSG.LEARN, { slot: s.slot }),
+        closeAfter: false,
+      };
+    });
+    this.showDialog(`<h3>📜 Entraîneur — ${this.cls ? this.cls.name : ''}</h3><div class="dsub">Apprenez de nouvelles techniques (or requis). Vous êtes niveau ${lvl}.</div>`,
+      [...rows, { label: 'Fermer', close: true }]);
+  }
+
+  showArmory(items) {
+    const gold = this.self ? this.self.gold : 0;
+    const rows = items.map((it) => {
+      const afford = gold >= it.value;
+      return {
+        label: `<span style="color:${rarityColor(it.rarity)}">${it.name}</span> <span class="sd">[niv.${it.lvl}] ${itemStatsText(it)}</span> — <b>${it.value} or</b>`,
+        disabled: !afford,
+        fn: () => this.net.send(MSG.BUY, { id: it.id }),
+      };
+    });
+    this.showDialog('<h3>🛡️ Armurier</h3><div class="dsub">Équipement adapté à votre classe.</div>',
+      [...rows, { label: 'Fermer', close: true }]);
   }
 
   showQuests(quests) {
@@ -1849,6 +2239,42 @@ class UI {
       }),
       { label: 'Fermer', close: true },
     ]);
+  }
+
+  // ---- inventaire & équipement ----
+  toggleInventory() {
+    const inv = $('inventory');
+    inv.classList.toggle('hidden');
+    if (!inv.classList.contains('hidden')) this.renderInventory();
+  }
+
+  renderInventory() {
+    const eq = $('inv-equip');
+    eq.innerHTML = '';
+    for (const slot of EQUIP_SLOTS) {
+      const it = this.equip[slot];
+      const d = document.createElement('div');
+      d.className = 'inv-slot' + (it ? ' filled' : '');
+      if (it) d.style.borderColor = rarityColor(it.rarity);
+      d.innerHTML = `<div class="slk">${SLOT_LABELS[slot]}</div>` +
+        (it ? `<div class="itn" style="color:${rarityColor(it.rarity)}">${it.name}</div><div class="its">${itemStatsText(it)}</div>`
+            : `<div class="ite">— vide —</div>`);
+      if (it) { d.title = 'Cliquer pour déséquiper'; d.onclick = () => this.net.send(MSG.UNEQUIP, { slot }); }
+      eq.appendChild(d);
+    }
+    const bag = $('inv-bag');
+    bag.innerHTML = '';
+    if (!this.bag.length) bag.innerHTML = '<div class="ite" style="padding:8px">Sac vide — tuez des monstres ou visitez l\'armurier.</div>';
+    this.bag.forEach((it, idx) => {
+      const d = document.createElement('div');
+      d.className = 'inv-item';
+      d.style.borderLeftColor = rarityColor(it.rarity);
+      d.innerHTML = `<div class="itn" style="color:${rarityColor(it.rarity)}">${it.name} <span class="sd">[niv.${it.lvl}]</span></div><div class="its">${SLOT_LABELS[it.slot]} · ${itemStatsText(it)}</div>`;
+      d.title = 'Cliquer pour équiper';
+      d.onclick = () => this.net.send(MSG.EQUIP, { idx });
+      bag.appendChild(d);
+    });
+    $('inv-gold').textContent = `💰 ${this.self ? this.self.gold : 0} or`;
   }
 
   death(show) { $('deathscreen').classList.toggle('hidden', !show); }
@@ -2033,12 +2459,103 @@ function charSelect({ onPlay, onCreate }) {
   return true;
 }
 // ============================================================
+// Sons procéduraux (Web Audio API) — aucun fichier externe.
+// Fonctionne en multijoueur comme en solo. Coupable avec M.
+// ============================================================
+const Sound = {
+  ctx: null, master: null, muted: false, _last: {},
+
+  init() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.32;
+    this.master.connect(this.ctx.destination);
+    try { this.muted = localStorage.getItem('raw_muted') === '1'; } catch {}
+    if (this.muted && this.master) this.master.gain.value = 0;
+  },
+  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  setMuted(m) {
+    this.muted = m;
+    if (this.master) this.master.gain.value = m ? 0 : 0.32;
+    try { localStorage.setItem('raw_muted', m ? '1' : '0'); } catch {}
+    return m;
+  },
+  toggle() { return this.setMuted(!this.muted); },
+  _throttle(name, ms) { const t = performance.now(); if (this._last[name] && t - this._last[name] < ms) return false; this._last[name] = t; return true; },
+
+  tone({ freq = 440, type = 'sine', dur = 0.15, gain = 0.3, slideTo = null, delay = 0 }) {
+    if (!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime + delay;
+    const o = this.ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(this.master); o.start(t0); o.stop(t0 + dur + 0.03);
+  },
+  noise({ dur = 0.18, gain = 0.25, delay = 0, cut = 1800 }) {
+    if (!this.ctx || this.muted) return;
+    const t0 = this.ctx.currentTime + delay;
+    const n = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cut;
+    const g = this.ctx.createGain(); g.gain.value = gain;
+    src.connect(f).connect(g).connect(this.master); src.start(t0);
+  },
+
+  play(name) {
+    if (!this.ctx || this.muted) return;
+    this.resume();
+    switch (name) {
+      case 'hit': if (!this._throttle('hit', 85)) return;
+        this.noise({ dur: 0.12, gain: 0.18, cut: 1400 }); this.tone({ freq: 170, type: 'square', dur: 0.08, gain: 0.1, slideTo: 80 }); break;
+      case 'cast': if (!this._throttle('cast', 70)) return;
+        this.tone({ freq: 520, type: 'triangle', dur: 0.22, gain: 0.16, slideTo: 900 }); break;
+      case 'heal':
+        this.tone({ freq: 660, type: 'sine', dur: 0.3, gain: 0.16, slideTo: 990 }); break;
+      case 'levelup':
+        [523, 659, 784, 1047].forEach((f, i) => this.tone({ freq: f, type: 'triangle', dur: 0.26, gain: 0.2, delay: i * 0.12 })); break;
+      case 'loot':
+        this.tone({ freq: 880, type: 'square', dur: 0.1, gain: 0.15 });
+        this.tone({ freq: 1320, type: 'square', dur: 0.12, gain: 0.13, delay: 0.09 }); break;
+      case 'kill':
+        this.tone({ freq: 300, type: 'sawtooth', dur: 0.18, gain: 0.18, slideTo: 150 }); this.noise({ dur: 0.2, gain: 0.16, delay: 0.02 }); break;
+      case 'death':
+        this.tone({ freq: 220, type: 'sawtooth', dur: 0.7, gain: 0.22, slideTo: 55 }); break;
+      case 'fort':
+        [392, 523, 659, 784, 1047].forEach((f, i) => this.tone({ freq: f, type: 'triangle', dur: 0.32, gain: 0.2, delay: i * 0.1 })); break;
+      case 'learn':
+        [659, 988].forEach((f, i) => this.tone({ freq: f, type: 'triangle', dur: 0.26, gain: 0.18, delay: i * 0.1 })); break;
+      case 'click': if (!this._throttle('click', 40)) return;
+        this.tone({ freq: 330, type: 'square', dur: 0.05, gain: 0.08 }); break;
+      case 'target': if (!this._throttle('target', 60)) return;
+        this.tone({ freq: 720, type: 'sine', dur: 0.06, gain: 0.09 }); break;
+      case 'quest':
+        [587, 880].forEach((f, i) => this.tone({ freq: f, type: 'sine', dur: 0.2, gain: 0.15, delay: i * 0.1 })); break;
+    }
+  },
+};
+// ============================================================
 // REALMS AT WAR — client 3D low poly (Three.js)
 // Textures procédurales, animations, effets de sorts
 // ============================================================
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
 
 const ui = new UI(net);
+
+// Initialise l'audio au premier geste de l'utilisateur (politique navigateur)
+function initAudioOnce() {
+  Sound.init(); Sound.resume();
+  removeEventListener('pointerdown', initAudioOnce); removeEventListener('keydown', initAudioOnce);
+}
+addEventListener('pointerdown', initAudioOnce); addEventListener('keydown', initAudioOnce);
 
 let selfId = null;
 let me = { x: 0, z: 0, ry: 0, dead: false, stealthed: false };
@@ -2518,7 +3035,7 @@ function limb(w, h, d, color) {
   return new THREE.Mesh(geo, mat(color));
 }
 
-function makeBody(kind, realm, cls) {
+function makeBody(kind, realm, cls, race) {
   const g = new THREE.Group();
   let color = realm ? REALMS[realm].color : (KIND_COLORS[kind] || 0x999999);
   let scale = 1;
@@ -2542,36 +3059,85 @@ function makeBody(kind, realm, cls) {
   } else {
     const arch = cls ? classById(cls)?.arch : null;
     const robe = ['caster', 'healer', 'support'].includes(arch);
+    const tr = race ? raceTraits(race) : { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
+    const skin = tr.skin;
+    const bw = tr.build === 'stocky' ? 1.18 : tr.build === 'slim' ? 0.82 : 1; // largeur du buste selon la carrure
+
+    // torse (robe pour les lanceurs, cuirasse sinon), teinté par la classe/le royaume
     const body = new THREE.Mesh(
-      robe ? new THREE.ConeGeometry(1.2, 2.6, 6) : new THREE.BoxGeometry(1.6, 2.2, 0.9),
+      robe ? new THREE.ConeGeometry(1.2 * bw, 2.6, 7) : new THREE.BoxGeometry(1.6 * bw, 2.2, 0.95 * bw),
       mat(color)
     );
     body.position.y = robe ? 1.3 : 1.9; body.castShadow = true;
     anim.body = body; anim.bodyY = body.position.y;
-    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 0), mat(0xd9b48f));
-    head.position.y = 3.4;
-    g.add(body, head);
-    if (!robe) {
-      for (const s of [-1, 1]) {
-        const arm = limb(0.45, 1.8, 0.45, color);
-        arm.position.set(s * 1.1, 2.8, 0);
-        const leg = limb(0.55, 1.4, 0.55, 0x33363f);
-        leg.position.set(s * 0.45, 1.4, 0);
-        anim.arms.push(arm); anim.legs.push(leg);
-        g.add(arm, leg);
-        }
+    g.add(body);
+    // ceinture / col pour casser la silhouette
+    const belt = new THREE.Mesh(new THREE.BoxGeometry((robe ? 1.9 : 1.7) * bw, 0.35, (robe ? 1.9 : 1.0) * bw), mat(0x2a2d38));
+    belt.position.y = robe ? 1.0 : 1.0; g.add(belt);
+
+    // tête + cou, couleur de peau de la race
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.5, 6), mat(skin));
+    neck.position.y = 3.0; g.add(neck);
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.66 * (0.9 + bw * 0.1), 0), mat(skin));
+    head.position.y = 3.5; g.add(head);
+    // yeux (petits points sombres)
+    for (const sx of [-0.22, 0.22]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), mat(0x20232c));
+      eye.position.set(sx, 3.55, 0.55); g.add(eye);
     }
+    // cheveux / calotte
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.7 * (0.9 + bw * 0.1), 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x3a2b1d));
+    hair.position.y = 3.62; g.add(hair);
+
+    // traits de race : oreilles, barbe, défenses
+    if (tr.ears === 'pointy') {
+      for (const s of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.6, 4), mat(skin));
+        ear.position.set(s * 0.62, 3.7, 0); ear.rotation.z = s * -0.5; g.add(ear);
+      }
+    }
+    if (tr.beard) {
+      const beard = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 6), mat(0x6b5034));
+      beard.position.set(0, 3.05, 0.42); beard.rotation.x = Math.PI; g.add(beard);
+    }
+    if (tr.tusks) {
+      for (const s of [-1, 1]) {
+        const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.4, 5), mat(0xeae0c8));
+        tusk.position.set(s * 0.2, 3.2, 0.5); g.add(tusk);
+      }
+    }
+
+    // bras (peau) + mains, et jambes
+    for (const s of [-1, 1]) {
+      const arm = limb(0.42 * bw, 1.7, 0.42 * bw, skin);
+      arm.position.set(s * (1.0 * bw + 0.15), 2.7, 0);
+      anim.arms.push(arm); g.add(arm);
+      const leg = limb(0.5 * bw, 1.5, 0.5 * bw, 0x33363f);
+      leg.position.set(s * 0.42 * bw, 1.4, 0);
+      anim.legs.push(leg); g.add(leg);
+    }
+
+    // arme tenue en main
     const wgeo = robe ? new THREE.CylinderGeometry(0.12, 0.12, 3.4, 5) : new THREE.BoxGeometry(0.22, 2.0, 0.22);
-    if (!robe) wgeo.translate(0, 0.8, 0); // pivot vers la garde de l'arme
+    if (!robe) wgeo.translate(0, 0.8, 0);
     const weapon = new THREE.Mesh(wgeo, mat(robe ? 0x8a6a3a : 0xc8ccd8));
-    weapon.position.set(1.35, robe ? 2.0 : 1.6, 0.2);
-    anim.weapon = weapon;
-    g.add(weapon);
+    weapon.position.set(1.25 * bw + 0.2, robe ? 2.0 : 1.6, 0.2);
+    anim.weapon = weapon; g.add(weapon);
+    if (robe) { // pommeau lumineux pour les bâtons
+      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), mat(realm ? REALMS[realm].color : 0x9fd0ff));
+      orb.position.set(weapon.position.x, 3.7, 0.2); g.add(orb);
+    }
+
     if (kind === 'npc') {
       const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 6, 12), mat(0xf0d889));
-      halo.rotation.x = Math.PI / 2; halo.position.y = 4.3;
+      halo.rotation.x = Math.PI / 2; halo.position.y = 4.4;
       g.add(halo);
     }
+    // applique la stature de la race (hauteur et largeur)
+    scale *= 1;
+    g.scale.set(scale * tr.w, scale * tr.h, scale * tr.w);
+    g.userData.anim = anim;
+    return g;
   }
   g.scale.setScalar(scale);
   g.userData.anim = anim;
@@ -2623,11 +3189,11 @@ function labelColor(kind, realm, myRealm) {
 function syncEntities(list, myRealm) {
   const seen = new Set();
   for (const a of list) {
-    const [id, kind, name, realm, cls, lvl, x, z, ry, hpPct, dead, role] = a;
+    const [id, kind, name, realm, cls, lvl, x, z, ry, hpPct, dead, role, race] = a;
     seen.add(id);
     let e = entities.get(id);
     if (!e) {
-      const mesh = makeBody(kind, realm || null, cls);
+      const mesh = makeBody(kind, realm || null, cls, race || null);
       scene.add(mesh);
       e = { mesh, data: {}, label: null, labelKey: '' };
       entities.set(id, e);
@@ -2659,7 +3225,7 @@ function syncEntities(list, myRealm) {
 // ---------- Joueur local ----------
 let myMesh = null;
 function initSelf(create) {
-  myMesh = makeBody('player', create.realm, create.cls);
+  myMesh = makeBody('player', create.realm, create.cls, create.race);
   scene.add(myMesh);
   const base = REALMS[create.realm].base;
   me.x = base.x; me.z = base.z;
@@ -2675,14 +3241,16 @@ addEventListener('keydown', (e) => {
   if (ui.chatOpen) return;
   if (e.code === 'Enter') { ui.toggleChat(true); e.preventDefault(); return; }
   keys[e.code] = true;
+  if (e.code === 'KeyM') { const m = Sound.toggle(); ui.log(m ? '🔇 Sons coupés (M)' : '🔊 Sons activés (M)', 'info'); }
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5), 10);
-    if (n >= 1 && n <= 6) net.send(MSG.SKILL, { slot: n - 1 });
+    if (n >= 1 && n <= 9) { net.send(MSG.SKILL, { slot: n - 1 }); Sound.play('cast'); }
   }
   if (e.code === 'KeyR') net.send(MSG.ATTACK, { on: true });
   if (e.code === 'KeyT') net.send(MSG.USE_ITEM, { id: 'potion_hp' });
   if (e.code === 'KeyY') net.send(MSG.USE_ITEM, { id: 'potion_pw' });
   if (e.code === 'KeyJ') ui.toggleQuestLog();
+  if (e.code === 'KeyI') ui.toggleInventory();
   if (e.code === 'KeyF') targetNearest();
   if (e.code === 'KeyE') interactNearest();
   if (e.code === 'Escape') { setTarget(null); document.getElementById('dialog').classList.add('hidden'); }
@@ -2727,7 +3295,7 @@ renderer.domElement.addEventListener('click', (e) => {
 let targetId = null;
 function setTarget(id) {
   targetId = id;
-  net.send(MSG.TARGET, { id });
+  net.send(MSG.TARGET, { id }); Sound.play('target');
   updateTargetFrame();
 }
 function updateTargetFrame() {
@@ -2758,6 +3326,7 @@ function interactNearest() {
 
 // ---------- Réseau ----------
 let myRealmId = null;
+let prevFortOwner;
 
 net.on(MSG.WELCOME, (m) => {
   selfId = m.selfId;
@@ -2782,6 +3351,8 @@ net.on(MSG.STATE, (m) => {
   ui.setSelf({ ...m.me, name: undefined });
   me.stealthed = m.me.stealthed;
   ui.setFort(m.fort.owner, m.fort.progress);
+  if (prevFortOwner !== undefined && m.fort.owner !== prevFortOwner && m.fort.owner) Sound.play('fort');
+  prevFortOwner = m.fort.owner;
   if (fortFlagMat) fortFlagMat.color.setHex(m.fort.owner ? REALMS[m.fort.owner].color : 0xaaaaaa);
   updateTargetFrame();
   if (targetId && !entities.has(targetId)) { targetId = null; ui.setTarget(null); }
@@ -2790,13 +3361,23 @@ net.on(MSG.EVENT, (m) => {
   ui.log(m.text, m.cat);
   if (m.shop) ui.showShop(m.shop);
   if (m.quests) ui.showQuests(m.quests);
+  if (m.trainer) ui.showTrainer(m.trainer);
+  if (m.armory) ui.showArmory(m.armory);
+  if (m.loot && myMesh) spawnSparkles(entPos(selfId), 0xf0d889, 1.3);
+  // sons selon l'événement
+  if (m.loot || m.cat === 'loot') Sound.play('loot');
+  else if (m.cat === 'levelup') Sound.play('levelup');
+  else if (m.cat === 'rvr') Sound.play(/🏰/.test(m.text) ? 'fort' : 'kill');
+  else if (m.cat === 'quest') Sound.play('quest');
+  else if (m.cat === 'system' && /apprise/i.test(m.text)) Sound.play('learn');
+  else if (m.cat === 'combat') Sound.play(/PV|soign/i.test(m.text) ? 'heal' : 'hit');
   if (m.cat === 'levelup' && myMesh) {
     spawnRing({ x: me.x, z: me.z }, 0xffe45c, 8);
     spawnSparkles(entPos(selfId), 0xffe45c, 1.6);
   }
 });
 net.on(MSG.CHAT_BC, (m) => ui.log(`[${m.from}] ${m.text}`, 'chat'));
-net.on(MSG.DEAD, () => { me.dead = true; ui.death(true); });
+net.on(MSG.DEAD, () => { me.dead = true; ui.death(true); Sound.play('death'); });
 
 // ---------- Boucle ----------
 const clock = new THREE.Clock();

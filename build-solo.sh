@@ -51,6 +51,7 @@ EOF
 sed -e '/^import /d' -e 's/^export //' client/js/ui.js > "$W/04_ui.js"
 sed -e '/^import /d' -e 's/^export //' client/js/charcreate.js > "$W/05_cc.js"
 sed -e '/^import /d' -e 's/^export //' client/js/charselect.js > "$W/05b_select.js"
+sed -e '/^import /d' -e 's/^export //' client/js/sound.js > "$W/05c_sound.js"
 
 # 5) main : import three en URL directe, suppression des imports locaux et du new Net()
 sed -e "s|from 'three'|from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js'|" \

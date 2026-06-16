@@ -7,11 +7,19 @@ import { Net } from './net.js';
 import { UI } from './ui.js';
 import { charCreate } from './charcreate.js';
 import { charSelect, Roster } from './charselect.js';
-import { REALMS, WORLD, FRONTIER, MSG, classById, ARCHETYPES } from '/shared/data.js';
+import { Sound } from './sound.js';
+import { REALMS, WORLD, FRONTIER, MSG, classById, ARCHETYPES, raceTraits } from '/shared/data.js';
 import { SCENERY, resolveMove, pushApart, entityRadius } from '/shared/collision.js';
 
 const net = new Net();
 const ui = new UI(net);
+
+// Initialise l'audio au premier geste de l'utilisateur (politique navigateur)
+function initAudioOnce() {
+  Sound.init(); Sound.resume();
+  removeEventListener('pointerdown', initAudioOnce); removeEventListener('keydown', initAudioOnce);
+}
+addEventListener('pointerdown', initAudioOnce); addEventListener('keydown', initAudioOnce);
 
 let selfId = null;
 let me = { x: 0, z: 0, ry: 0, dead: false, stealthed: false };
@@ -491,7 +499,7 @@ function limb(w, h, d, color) {
   return new THREE.Mesh(geo, mat(color));
 }
 
-function makeBody(kind, realm, cls) {
+function makeBody(kind, realm, cls, race) {
   const g = new THREE.Group();
   let color = realm ? REALMS[realm].color : (KIND_COLORS[kind] || 0x999999);
   let scale = 1;
@@ -515,36 +523,85 @@ function makeBody(kind, realm, cls) {
   } else {
     const arch = cls ? classById(cls)?.arch : null;
     const robe = ['caster', 'healer', 'support'].includes(arch);
+    const tr = race ? raceTraits(race) : { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
+    const skin = tr.skin;
+    const bw = tr.build === 'stocky' ? 1.18 : tr.build === 'slim' ? 0.82 : 1; // largeur du buste selon la carrure
+
+    // torse (robe pour les lanceurs, cuirasse sinon), teinté par la classe/le royaume
     const body = new THREE.Mesh(
-      robe ? new THREE.ConeGeometry(1.2, 2.6, 6) : new THREE.BoxGeometry(1.6, 2.2, 0.9),
+      robe ? new THREE.ConeGeometry(1.2 * bw, 2.6, 7) : new THREE.BoxGeometry(1.6 * bw, 2.2, 0.95 * bw),
       mat(color)
     );
     body.position.y = robe ? 1.3 : 1.9; body.castShadow = true;
     anim.body = body; anim.bodyY = body.position.y;
-    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 0), mat(0xd9b48f));
-    head.position.y = 3.4;
-    g.add(body, head);
-    if (!robe) {
-      for (const s of [-1, 1]) {
-        const arm = limb(0.45, 1.8, 0.45, color);
-        arm.position.set(s * 1.1, 2.8, 0);
-        const leg = limb(0.55, 1.4, 0.55, 0x33363f);
-        leg.position.set(s * 0.45, 1.4, 0);
-        anim.arms.push(arm); anim.legs.push(leg);
-        g.add(arm, leg);
-        }
+    g.add(body);
+    // ceinture / col pour casser la silhouette
+    const belt = new THREE.Mesh(new THREE.BoxGeometry((robe ? 1.9 : 1.7) * bw, 0.35, (robe ? 1.9 : 1.0) * bw), mat(0x2a2d38));
+    belt.position.y = robe ? 1.0 : 1.0; g.add(belt);
+
+    // tête + cou, couleur de peau de la race
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.5, 6), mat(skin));
+    neck.position.y = 3.0; g.add(neck);
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.66 * (0.9 + bw * 0.1), 0), mat(skin));
+    head.position.y = 3.5; g.add(head);
+    // yeux (petits points sombres)
+    for (const sx of [-0.22, 0.22]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), mat(0x20232c));
+      eye.position.set(sx, 3.55, 0.55); g.add(eye);
     }
+    // cheveux / calotte
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.7 * (0.9 + bw * 0.1), 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x3a2b1d));
+    hair.position.y = 3.62; g.add(hair);
+
+    // traits de race : oreilles, barbe, défenses
+    if (tr.ears === 'pointy') {
+      for (const s of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.6, 4), mat(skin));
+        ear.position.set(s * 0.62, 3.7, 0); ear.rotation.z = s * -0.5; g.add(ear);
+      }
+    }
+    if (tr.beard) {
+      const beard = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 6), mat(0x6b5034));
+      beard.position.set(0, 3.05, 0.42); beard.rotation.x = Math.PI; g.add(beard);
+    }
+    if (tr.tusks) {
+      for (const s of [-1, 1]) {
+        const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.4, 5), mat(0xeae0c8));
+        tusk.position.set(s * 0.2, 3.2, 0.5); g.add(tusk);
+      }
+    }
+
+    // bras (peau) + mains, et jambes
+    for (const s of [-1, 1]) {
+      const arm = limb(0.42 * bw, 1.7, 0.42 * bw, skin);
+      arm.position.set(s * (1.0 * bw + 0.15), 2.7, 0);
+      anim.arms.push(arm); g.add(arm);
+      const leg = limb(0.5 * bw, 1.5, 0.5 * bw, 0x33363f);
+      leg.position.set(s * 0.42 * bw, 1.4, 0);
+      anim.legs.push(leg); g.add(leg);
+    }
+
+    // arme tenue en main
     const wgeo = robe ? new THREE.CylinderGeometry(0.12, 0.12, 3.4, 5) : new THREE.BoxGeometry(0.22, 2.0, 0.22);
-    if (!robe) wgeo.translate(0, 0.8, 0); // pivot vers la garde de l'arme
+    if (!robe) wgeo.translate(0, 0.8, 0);
     const weapon = new THREE.Mesh(wgeo, mat(robe ? 0x8a6a3a : 0xc8ccd8));
-    weapon.position.set(1.35, robe ? 2.0 : 1.6, 0.2);
-    anim.weapon = weapon;
-    g.add(weapon);
+    weapon.position.set(1.25 * bw + 0.2, robe ? 2.0 : 1.6, 0.2);
+    anim.weapon = weapon; g.add(weapon);
+    if (robe) { // pommeau lumineux pour les bâtons
+      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), mat(realm ? REALMS[realm].color : 0x9fd0ff));
+      orb.position.set(weapon.position.x, 3.7, 0.2); g.add(orb);
+    }
+
     if (kind === 'npc') {
       const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 6, 12), mat(0xf0d889));
-      halo.rotation.x = Math.PI / 2; halo.position.y = 4.3;
+      halo.rotation.x = Math.PI / 2; halo.position.y = 4.4;
       g.add(halo);
     }
+    // applique la stature de la race (hauteur et largeur)
+    scale *= 1;
+    g.scale.set(scale * tr.w, scale * tr.h, scale * tr.w);
+    g.userData.anim = anim;
+    return g;
   }
   g.scale.setScalar(scale);
   g.userData.anim = anim;
@@ -596,11 +653,11 @@ function labelColor(kind, realm, myRealm) {
 function syncEntities(list, myRealm) {
   const seen = new Set();
   for (const a of list) {
-    const [id, kind, name, realm, cls, lvl, x, z, ry, hpPct, dead, role] = a;
+    const [id, kind, name, realm, cls, lvl, x, z, ry, hpPct, dead, role, race] = a;
     seen.add(id);
     let e = entities.get(id);
     if (!e) {
-      const mesh = makeBody(kind, realm || null, cls);
+      const mesh = makeBody(kind, realm || null, cls, race || null);
       scene.add(mesh);
       e = { mesh, data: {}, label: null, labelKey: '' };
       entities.set(id, e);
@@ -632,7 +689,7 @@ function syncEntities(list, myRealm) {
 // ---------- Joueur local ----------
 let myMesh = null;
 function initSelf(create) {
-  myMesh = makeBody('player', create.realm, create.cls);
+  myMesh = makeBody('player', create.realm, create.cls, create.race);
   scene.add(myMesh);
   const base = REALMS[create.realm].base;
   me.x = base.x; me.z = base.z;
@@ -648,14 +705,16 @@ addEventListener('keydown', (e) => {
   if (ui.chatOpen) return;
   if (e.code === 'Enter') { ui.toggleChat(true); e.preventDefault(); return; }
   keys[e.code] = true;
+  if (e.code === 'KeyM') { const m = Sound.toggle(); ui.log(m ? '🔇 Sons coupés (M)' : '🔊 Sons activés (M)', 'info'); }
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5), 10);
-    if (n >= 1 && n <= 6) net.send(MSG.SKILL, { slot: n - 1 });
+    if (n >= 1 && n <= 9) { net.send(MSG.SKILL, { slot: n - 1 }); Sound.play('cast'); }
   }
   if (e.code === 'KeyR') net.send(MSG.ATTACK, { on: true });
   if (e.code === 'KeyT') net.send(MSG.USE_ITEM, { id: 'potion_hp' });
   if (e.code === 'KeyY') net.send(MSG.USE_ITEM, { id: 'potion_pw' });
   if (e.code === 'KeyJ') ui.toggleQuestLog();
+  if (e.code === 'KeyI') ui.toggleInventory();
   if (e.code === 'KeyF') targetNearest();
   if (e.code === 'KeyE') interactNearest();
   if (e.code === 'Escape') { setTarget(null); document.getElementById('dialog').classList.add('hidden'); }
@@ -700,7 +759,7 @@ renderer.domElement.addEventListener('click', (e) => {
 let targetId = null;
 function setTarget(id) {
   targetId = id;
-  net.send(MSG.TARGET, { id });
+  net.send(MSG.TARGET, { id }); Sound.play('target');
   updateTargetFrame();
 }
 function updateTargetFrame() {
@@ -731,6 +790,7 @@ function interactNearest() {
 
 // ---------- Réseau ----------
 let myRealmId = null;
+let prevFortOwner;
 
 net.on(MSG.WELCOME, (m) => {
   selfId = m.selfId;
@@ -755,6 +815,8 @@ net.on(MSG.STATE, (m) => {
   ui.setSelf({ ...m.me, name: undefined });
   me.stealthed = m.me.stealthed;
   ui.setFort(m.fort.owner, m.fort.progress);
+  if (prevFortOwner !== undefined && m.fort.owner !== prevFortOwner && m.fort.owner) Sound.play('fort');
+  prevFortOwner = m.fort.owner;
   if (fortFlagMat) fortFlagMat.color.setHex(m.fort.owner ? REALMS[m.fort.owner].color : 0xaaaaaa);
   updateTargetFrame();
   if (targetId && !entities.has(targetId)) { targetId = null; ui.setTarget(null); }
@@ -763,13 +825,23 @@ net.on(MSG.EVENT, (m) => {
   ui.log(m.text, m.cat);
   if (m.shop) ui.showShop(m.shop);
   if (m.quests) ui.showQuests(m.quests);
+  if (m.trainer) ui.showTrainer(m.trainer);
+  if (m.armory) ui.showArmory(m.armory);
+  if (m.loot && myMesh) spawnSparkles(entPos(selfId), 0xf0d889, 1.3);
+  // sons selon l'événement
+  if (m.loot || m.cat === 'loot') Sound.play('loot');
+  else if (m.cat === 'levelup') Sound.play('levelup');
+  else if (m.cat === 'rvr') Sound.play(/🏰/.test(m.text) ? 'fort' : 'kill');
+  else if (m.cat === 'quest') Sound.play('quest');
+  else if (m.cat === 'system' && /apprise/i.test(m.text)) Sound.play('learn');
+  else if (m.cat === 'combat') Sound.play(/PV|soign/i.test(m.text) ? 'heal' : 'hit');
   if (m.cat === 'levelup' && myMesh) {
     spawnRing({ x: me.x, z: me.z }, 0xffe45c, 8);
     spawnSparkles(entPos(selfId), 0xffe45c, 1.6);
   }
 });
 net.on(MSG.CHAT_BC, (m) => ui.log(`[${m.from}] ${m.text}`, 'chat'));
-net.on(MSG.DEAD, () => { me.dead = true; ui.death(true); });
+net.on(MSG.DEAD, () => { me.dead = true; ui.death(true); Sound.play('death'); });
 
 // ---------- Boucle ----------
 const clock = new THREE.Clock();

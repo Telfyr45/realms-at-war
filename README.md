@@ -25,9 +25,11 @@ liste vos héros (niveau, or) ; sinon l'écran de création s'affiche directemen
 | | |
 |---|---|
 | **Royaumes** | Albion (Camelot), Hibernia (Tir na Nog), Midgard (Jordheim) |
-| **Classes** | Les 44 classes de DAoC, toutes jouables, regroupées en 7 archétypes (combattant, hybride, soigneur, mage, furtif, archer, barde) avec 6 compétences chacune, débloquées aux niveaux 1/4/8/12/20/30 |
+| **Classes** | Les 44 classes de DAoC, toutes jouables, regroupées en 7 archétypes (combattant, hybride, soigneur, mage, furtif, archer, barde), **9 compétences chacune** à **apprendre auprès de l'entraîneur** (or + niveau requis), touches 1-9 |
+| **Avatars** | Modèles détaillés **différenciés par race** (taille, carrure, peau, oreilles pointues, barbe, défenses…) pour les 18 races des 3 royaumes |
+| **Équipement** | Loot d'objets (drops de monstres + **armurier** en ville) : armes, bijoux et armure **légère / moyenne / lourde selon la classe**, 4 raretés ; 6 emplacements (arme, casque, armure, bottes, anneau, amulette), inventaire (touche I), bonus de stats/PV/dégâts/armure |
 | **Collisions** | Décor déterministe partagé client/serveur (arbres, rochers, murailles, tours, donjons) + collisions entre entités, avec prédiction côté client |
-| **Sauvegarde** | Personnages persistés (niveau, XP, or, objets, quêtes, position) : `server/save.json` en multijoueur, localStorage en solo. Reprenez le même nom + royaume + classe |
+| **Sauvegarde** | Personnages persistés (niveau, XP, or, objets, **compétences apprises**, **équipement & inventaire**, quêtes, position) : `server/save.json` en multijoueur, localStorage en solo + écran de sélection des personnages |
 | **PvE** | 4 camps de monstres par royaume (niv. 1 → 16), XP, or, niveaux 1-50 |
 | **RvR** | **Grande zone frontalière centrale** reliant les 3 royaumes par des routes, IA ennemies des deux autres royaumes, **Fort Central renforcé (murailles, tours, donjon) capturable** |
 | **Villes** | Capitale par royaume : entraîneur, marchand, émissaire (quêtes), gardes |

@@ -49,21 +49,27 @@ export const ARCHETYPES = {
     label: 'Combattant', hp: 1.25, power: 0.6, dmg: 1.0,
     skills: [
       { t: 'melee', p: 1.6, cd: 6, cost: 5, rng: 4, lvl: 1 },
-      { t: 'stun', p: 0.8, cd: 20, cost: 10, rng: 4, dur: 3, lvl: 4 },
-      { t: 'dot', p: 0.9, cd: 12, cost: 8, rng: 4, dur: 9, lvl: 8 },
-      { t: 'buff', p: 0.25, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 12 },
-      { t: 'aoe', p: 1.5, cd: 16, cost: 14, rng: 6, lvl: 20, name: "Tourbillon d'acier" },
-      { t: 'melee', p: 3.0, cd: 25, cost: 18, rng: 4, lvl: 30, name: 'Frappe dévastatrice' },
+      { t: 'stun', p: 0.8, cd: 18, cost: 10, rng: 4, dur: 3, lvl: 2 },
+      { t: 'dot', p: 0.9, cd: 12, cost: 8, rng: 4, dur: 9, lvl: 3 },
+      { t: 'buff', p: 0.25, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 5 },
+      { t: 'melee', p: 2.0, cd: 9, cost: 10, rng: 4, lvl: 7, name: 'Brise-garde' },
+      { t: 'aoe', p: 1.5, cd: 16, cost: 14, rng: 6, lvl: 10, name: "Tourbillon d'acier" },
+      { t: 'dot', p: 1.3, cd: 14, cost: 12, rng: 4, dur: 10, lvl: 14, name: 'Entaille sanglante' },
+      { t: 'melee', p: 3.0, cd: 25, cost: 18, rng: 4, lvl: 20, name: 'Frappe dévastatrice' },
+      { t: 'aoe', p: 2.4, cd: 30, cost: 22, rng: 7, lvl: 30, name: 'Séisme martial' },
     ],
   },
   hybrid: {
     label: 'Hybride', hp: 1.1, power: 0.85, dmg: 0.9,
     skills: [
       { t: 'melee', p: 1.4, cd: 5, cost: 5, rng: 4, lvl: 1 },
-      { t: 'heal', p: 0.9, cd: 14, cost: 15, rng: 0, lvl: 4 },
-      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 8 },
-      { t: 'melee', p: 1.9, cd: 12, cost: 10, rng: 4, lvl: 12 },
-      { t: 'spell', p: 1.6, cd: 8, cost: 12, rng: 30, lvl: 20, name: 'Châtiment' },
+      { t: 'heal', p: 0.9, cd: 14, cost: 15, rng: 0, lvl: 2 },
+      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 3 },
+      { t: 'melee', p: 1.9, cd: 12, cost: 10, rng: 4, lvl: 5 },
+      { t: 'spell', p: 1.6, cd: 8, cost: 12, rng: 30, lvl: 7, name: 'Châtiment' },
+      { t: 'dot', p: 1.0, cd: 10, cost: 10, rng: 30, dur: 12, lvl: 10, name: 'Fléau persistant' },
+      { t: 'heal', p: 1.4, cd: 12, cost: 18, rng: 30, lvl: 14, name: 'Imposition des mains' },
+      { t: 'spell', p: 2.4, cd: 9, cost: 16, rng: 32, lvl: 20, name: 'Verdict sacré' },
       { t: 'buff', p: 0.45, cd: 40, cost: 16, rng: 0, dur: 20, lvl: 30, name: 'Aura de puissance' },
     ],
   },
@@ -71,31 +77,40 @@ export const ARCHETYPES = {
     label: 'Soigneur', hp: 0.95, power: 1.2, dmg: 0.7,
     skills: [
       { t: 'heal', p: 1.5, cd: 3, cost: 12, rng: 30, lvl: 1 },
-      { t: 'groupheal', p: 1.0, cd: 10, cost: 22, rng: 30, lvl: 4 },
-      { t: 'spell', p: 1.1, cd: 4, cost: 8, rng: 35, lvl: 8 },
-      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 30, dur: 25, lvl: 12 },
+      { t: 'groupheal', p: 1.0, cd: 10, cost: 22, rng: 30, lvl: 2 },
+      { t: 'spell', p: 1.1, cd: 4, cost: 8, rng: 35, lvl: 3 },
+      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 30, dur: 25, lvl: 5 },
+      { t: 'heal', p: 2.2, cd: 9, cost: 22, rng: 30, lvl: 7, name: 'Grâce supérieure' },
+      { t: 'hot', p: 0.8, cd: 10, cost: 16, rng: 30, dur: 15, lvl: 10, name: 'Régénération' },
+      { t: 'root', p: 0, cd: 15, cost: 12, rng: 35, dur: 6, lvl: 14, name: 'Entraves sacrées' },
       { t: 'heal', p: 2.6, cd: 12, cost: 25, rng: 30, lvl: 20, name: 'Grâce majeure' },
-      { t: 'aoe', p: 1.6, cd: 18, cost: 20, rng: 30, lvl: 30, name: 'Châtiment céleste' },
+      { t: 'aoe', p: 1.8, cd: 18, cost: 22, rng: 32, lvl: 30, name: 'Châtiment céleste' },
     ],
   },
   caster: {
     label: 'Mage', hp: 0.8, power: 1.3, dmg: 1.0,
     skills: [
       { t: 'spell', p: 1.8, cd: 3, cost: 9, rng: 38, lvl: 1 },
-      { t: 'dot', p: 1.1, cd: 8, cost: 10, rng: 35, dur: 12, lvl: 4 },
-      { t: 'root', p: 0, cd: 15, cost: 10, rng: 35, dur: 6, lvl: 8 },
-      { t: 'aoe', p: 1.3, cd: 12, cost: 18, rng: 30, lvl: 12 },
+      { t: 'dot', p: 1.1, cd: 8, cost: 10, rng: 35, dur: 12, lvl: 2 },
+      { t: 'root', p: 0, cd: 15, cost: 10, rng: 35, dur: 6, lvl: 3 },
+      { t: 'aoe', p: 1.3, cd: 12, cost: 18, rng: 30, lvl: 5 },
+      { t: 'spell', p: 2.0, cd: 5, cost: 12, rng: 38, lvl: 7, name: 'Trait du néant' },
+      { t: 'spell', p: 1.0, cd: 2, cost: 6, rng: 38, lvl: 10, name: 'Éclat mineur' },
+      { t: 'dot', p: 1.6, cd: 12, cost: 16, rng: 35, dur: 14, lvl: 14, name: 'Malédiction rampante' },
       { t: 'spell', p: 2.6, cd: 8, cost: 16, rng: 38, lvl: 20, name: 'Frappe du néant' },
-      { t: 'aoe', p: 2.0, cd: 20, cost: 26, rng: 32, lvl: 30, name: 'Cataclysme' },
+      { t: 'aoe', p: 2.4, cd: 20, cost: 26, rng: 32, lvl: 30, name: 'Cataclysme' },
     ],
   },
   stealth: {
     label: 'Furtif', hp: 0.95, power: 0.8, dmg: 1.1,
     skills: [
       { t: 'stealth', p: 0, cd: 8, cost: 5, rng: 0, lvl: 1 },
-      { t: 'melee', p: 2.6, cd: 8, cost: 8, rng: 4, fromStealth: 2, lvl: 4 },
-      { t: 'dot', p: 1.0, cd: 10, cost: 8, rng: 4, dur: 12, lvl: 8 },
-      { t: 'buff', p: 0.3, cd: 30, cost: 10, rng: 0, dur: 15, lvl: 12 },
+      { t: 'melee', p: 2.6, cd: 8, cost: 8, rng: 4, fromStealth: 2, lvl: 2 },
+      { t: 'dot', p: 1.0, cd: 10, cost: 8, rng: 4, dur: 12, lvl: 3 },
+      { t: 'buff', p: 0.3, cd: 30, cost: 10, rng: 0, dur: 15, lvl: 5 },
+      { t: 'melee', p: 2.0, cd: 7, cost: 8, rng: 4, lvl: 7, name: 'Coup vicieux' },
+      { t: 'melee', p: 2.8, cd: 12, cost: 10, rng: 4, fromStealth: 1.8, lvl: 10, name: 'Éviscération' },
+      { t: 'root', p: 0.3, cd: 18, cost: 10, rng: 30, dur: 5, lvl: 14, name: 'Bolas' },
       { t: 'melee', p: 3.6, cd: 16, cost: 12, rng: 4, fromStealth: 2.2, lvl: 20, name: 'Lame fatale' },
       { t: 'buff', p: 0.5, cd: 40, cost: 14, rng: 0, dur: 15, lvl: 30, name: 'Danse des ombres' },
     ],
@@ -104,26 +119,31 @@ export const ARCHETYPES = {
     label: 'Archer', hp: 1.0, power: 0.8, dmg: 1.0,
     skills: [
       { t: 'ranged', p: 1.7, cd: 4, cost: 6, rng: 40, lvl: 1 },
-      { t: 'ranged', p: 2.4, cd: 10, cost: 12, rng: 45, lvl: 4 },
-      { t: 'root', p: 0.4, cd: 18, cost: 10, rng: 38, dur: 5, lvl: 8 },
-      { t: 'melee', p: 1.3, cd: 6, cost: 5, rng: 4, lvl: 12 },
+      { t: 'ranged', p: 2.4, cd: 10, cost: 12, rng: 45, lvl: 2 },
+      { t: 'root', p: 0.4, cd: 18, cost: 10, rng: 38, dur: 5, lvl: 3 },
+      { t: 'melee', p: 1.3, cd: 6, cost: 5, rng: 4, lvl: 5 },
+      { t: 'ranged', p: 2.0, cd: 7, cost: 10, rng: 42, lvl: 7, name: 'Tir rapide' },
+      { t: 'ranged', p: 2.8, cd: 12, cost: 14, rng: 45, lvl: 10, name: 'Tir perforant' },
+      { t: 'dot', p: 1.2, cd: 12, cost: 12, rng: 40, dur: 10, lvl: 14, name: 'Flèche empoisonnée' },
       { t: 'aoe', p: 1.6, cd: 15, cost: 14, rng: 38, lvl: 20, name: 'Pluie de flèches' },
-      { t: 'ranged', p: 3.4, cd: 20, cost: 16, rng: 45, lvl: 30, name: 'Tir perçant' },
+      { t: 'ranged', p: 3.6, cd: 20, cost: 18, rng: 48, lvl: 30, name: 'Tir du faucon' },
     ],
   },
   support: {
     label: 'Barde', hp: 1.0, power: 1.0, dmg: 0.8,
     skills: [
       { t: 'hot', p: 0.7, cd: 8, cost: 12, rng: 30, dur: 12, lvl: 1 },
-      { t: 'buff', p: 0.35, cd: 20, cost: 10, rng: 0, dur: 15, lvl: 4 },
-      { t: 'spell', p: 1.3, cd: 4, cost: 8, rng: 32, lvl: 8 },
-      { t: 'mez', p: 0, cd: 20, cost: 14, rng: 32, dur: 6, lvl: 12 },
+      { t: 'buff', p: 0.35, cd: 20, cost: 10, rng: 0, dur: 15, lvl: 2 },
+      { t: 'spell', p: 1.3, cd: 4, cost: 8, rng: 32, lvl: 3 },
+      { t: 'mez', p: 0, cd: 20, cost: 14, rng: 32, dur: 6, lvl: 5 },
+      { t: 'groupheal', p: 0.9, cd: 12, cost: 20, rng: 30, lvl: 7, name: 'Refrain apaisant' },
+      { t: 'buff', p: 0.4, cd: 24, cost: 12, rng: 0, dur: 16, lvl: 10, name: 'Marche héroïque' },
+      { t: 'root', p: 0, cd: 16, cost: 12, rng: 32, dur: 6, lvl: 14, name: 'Note paralysante' },
       { t: 'buff', p: 0.5, cd: 30, cost: 14, rng: 0, dur: 18, lvl: 20, name: 'Hymne héroïque' },
-      { t: 'aoe', p: 1.8, cd: 18, cost: 20, rng: 30, lvl: 30, name: 'Crescendo' },
+      { t: 'aoe', p: 1.9, cd: 18, cost: 22, rng: 30, lvl: 30, name: 'Crescendo' },
     ],
   },
 };
-
 // ------------------------------------------------------------
 // Les 44 classes de Dark Age of Camelot
 // stats: str/con/dex/qui/mag (mag = stat de magie, libellé via magStat)
@@ -395,6 +415,120 @@ export const MSG = {
   CREATE: 'create', MOVE: 'move', SKILL: 'skill', ATTACK: 'attack', TARGET: 'target',
   CHAT: 'chat', QUEST_ACCEPT: 'qaccept', QUEST_TURNIN: 'qturnin', BUY: 'buy', USE_ITEM: 'useitem',
   RECRUIT: 'recruit', RESPAWN: 'respawn', INTERACT: 'interact',
+  LEARN: 'learn', EQUIP: 'equip', UNEQUIP: 'unequip', SELL: 'sell',
   // serveur -> client
   WELCOME: 'welcome', STATE: 'state', EVENT: 'event', SELF: 'self', CHAT_BC: 'chatbc', DEAD: 'dead',
 };
+
+// ============================================================
+// RACES — traits morphologiques pour des avatars différenciés
+// h: échelle hauteur · w: échelle largeur · skin: couleur peau
+// ears: 'pointy' | null · beard · tusks · build: silhouette
+// ============================================================
+export const RACES = {
+  // Albion
+  'Breton':     { h: 1.00, w: 1.00, skin: 0xd9b48f, build: 'norm' },
+  'Avalonien':  { h: 1.02, w: 0.90, skin: 0xe7c9a4, build: 'slim' },
+  'Highlander': { h: 1.12, w: 1.10, skin: 0xd6ad86, build: 'stocky', beard: true },
+  'Sarrasin':   { h: 1.00, w: 0.98, skin: 0xa9744a, build: 'norm' },
+  'Inconnu':    { h: 1.05, w: 0.95, skin: 0xb7c2bf, build: 'slim' },
+  'Demi-Ogre':  { h: 1.42, w: 1.42, skin: 0x8c9a6e, build: 'stocky', tusks: true },
+  // Hibernia
+  'Celte':      { h: 1.02, w: 1.00, skin: 0xe2bf98, build: 'norm' },
+  'Firbolg':    { h: 1.30, w: 1.32, skin: 0xa8b78b, build: 'stocky' },
+  'Lurikeen':   { h: 0.70, w: 0.86, skin: 0xe9c8a2, build: 'slim', ears: 'pointy' },
+  'Elfe':       { h: 1.06, w: 0.84, skin: 0xf1dac2, build: 'slim', ears: 'pointy' },
+  'Sylvan':     { h: 1.16, w: 1.12, skin: 0x70592f, build: 'stocky' },
+  'Shar':       { h: 1.10, w: 1.18, skin: 0x9aa0ab, build: 'stocky' },
+  // Midgard
+  'Norrois':    { h: 1.06, w: 1.04, skin: 0xe6c19a, build: 'norm', beard: true },
+  'Troll':      { h: 1.50, w: 1.46, skin: 0x6f9460, build: 'stocky', tusks: true },
+  'Nain':       { h: 0.78, w: 1.22, skin: 0xd9a87e, build: 'stocky', beard: true },
+  'Kobold':     { h: 0.74, w: 0.84, skin: 0x84a55c, build: 'slim', ears: 'pointy' },
+  'Valkyn':     { h: 1.00, w: 0.96, skin: 0x6e604c, build: 'slim', ears: 'pointy' },
+  'Frostalf':   { h: 1.04, w: 0.90, skin: 0xc2e3f0, build: 'slim', ears: 'pointy' },
+};
+export const raceTraits = (name) => RACES[name] || { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
+
+// ============================================================
+// SORTS — coût d'apprentissage chez l'entraîneur (or)
+// ============================================================
+export const skillCost = (lvl) => Math.round(15 + (Math.max(1, lvl) - 1) * 16);
+
+// ============================================================
+// ÉQUIPEMENT & LOOT
+// ============================================================
+export const EQUIP_SLOTS = ['weapon', 'head', 'chest', 'feet', 'ring', 'amulet'];
+export const SLOT_LABELS = { weapon: 'Arme', head: 'Casque', chest: 'Armure', feet: 'Bottes', ring: 'Anneau', amulet: 'Amulette' };
+
+// classe d'armure portée selon l'archétype
+export const WEIGHT_BY_ARCH = {
+  tank: 'lourde', hybrid: 'moyenne', healer: 'moyenne', support: 'moyenne',
+  archer: 'moyenne', caster: 'légère', stealth: 'légère',
+};
+export const weightOfArch = (arch) => WEIGHT_BY_ARCH[arch] || 'moyenne';
+
+export const RARITIES = [
+  { id: 'commun', label: 'Commun', mult: 1.0, color: '#c8ccd8', w: 60 },
+  { id: 'rare', label: 'Rare', mult: 1.4, color: '#5aa9e6', w: 27 },
+  { id: 'epique', label: 'Épique', mult: 1.9, color: '#b96be0', w: 10 },
+  { id: 'legendaire', label: 'Légendaire', mult: 2.6, color: '#f0a93a', w: 3 },
+];
+export const rarityById = (id) => RARITIES.find((r) => r.id === id) || RARITIES[0];
+
+const ARMOR_BASE = { 'légère': 4, 'moyenne': 7, 'lourde': 11 };
+const PIECE_FACTOR = { chest: 1.5, head: 0.9, feet: 0.7 };
+const WEAPON_NAMES = ['Lame', 'Hache', 'Masse', 'Dague', 'Bâton', 'Fléau', 'Lance'];
+const ARMOR_MAT = { 'légère': 'de cuir', 'moyenne': 'de mailles', 'lourde': 'de plaques' };
+const SLOT_BASE = {
+  weapon: WEAPON_NAMES,
+  head: ['Heaume', 'Casque', 'Coiffe', 'Capuche'],
+  chest: ['Plastron', 'Cuirasse', 'Cotte', 'Harnois'],
+  feet: ['Bottes', 'Jambières', 'Solerets', 'Grèves'],
+  ring: ['Anneau', 'Bague', 'Chevalière'],
+  amulet: ['Amulette', 'Pendentif', 'Talisman'],
+};
+const RARITY_ADJ = { commun: '', rare: "de l'aguerri", epique: 'runique', legendaire: 'des Anciens' };
+
+const pickFrom = (arr, rnd) => arr[Math.floor(rnd() * arr.length)];
+
+// Génère un objet d'équipement. rnd = générateur [0,1) (Math.random par défaut).
+export function genItem({ id, slot, lvl, rarity = 'commun', weight = 'moyenne', rnd = Math.random }) {
+  const R = rarityById(rarity);
+  const L = Math.max(1, lvl | 0);
+  const sb = (base) => Math.max(1, Math.round(base * (1 + L * 0.22) * R.mult));
+  const it = { id, slot, lvl: L, rarity, weight: null, name: '', dmg: 0, armor: 0, stats: {}, hp: 0, power: 0, value: 0 };
+  const base = pickFrom(SLOT_BASE[slot], rnd);
+  const adj = RARITY_ADJ[rarity];
+
+  if (slot === 'weapon') {
+    it.dmg = +( (2.4 + L * 0.7) * R.mult ).toFixed(1);
+    it.stats.str = sb(1); it.stats.dex = sb(1);
+    it.name = `${base} ${adj || 'de combat'}`.trim();
+  } else if (slot === 'ring' || slot === 'amulet') {
+    it.stats.mag = sb(1); it.stats.qui = sb(1);
+    it.power = sb(4); it.hp = sb(3);
+    it.name = `${base} ${adj || 'gravé'}`.trim();
+  } else { // pièces d'armure
+    it.weight = weight;
+    it.armor = Math.round((ARMOR_BASE[weight] + L * 0.8) * (PIECE_FACTOR[slot] || 1) * R.mult);
+    it.stats.con = sb(2);
+    if (slot === 'chest') it.hp = sb(5);
+    it.name = `${base} ${ARMOR_MAT[weight]}${adj ? ' ' + adj : ''}`.trim();
+  }
+  it.value = Math.max(5, Math.round((it.dmg * 6 + it.armor * 2 + (it.hp + it.power) * 0.5 + 4) * (1 + L * 0.3)));
+  return it;
+}
+
+// Agrège les bonus de toutes les pièces équipées d'un joueur.
+export function gearBonus(equip) {
+  const out = { str: 0, con: 0, dex: 0, qui: 0, mag: 0, hp: 0, power: 0, armor: 0, dmg: 0 };
+  if (!equip) return out;
+  for (const slot of EQUIP_SLOTS) {
+    const it = equip[slot];
+    if (!it) continue;
+    for (const k of ['str', 'con', 'dex', 'qui', 'mag']) out[k] += (it.stats && it.stats[k]) || 0;
+    out.hp += it.hp || 0; out.power += it.power || 0; out.armor += it.armor || 0; out.dmg += it.dmg || 0;
+  }
+  return out;
+}

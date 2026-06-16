@@ -78,6 +78,17 @@
       <button class="gbtn" data-role="healer">+ Compagnon soigneur</button>
       <button class="gbtn" id="btn-pot-hp">Potion PV (T)</button>
       <button class="gbtn" id="btn-pot-pw">Potion mana (Y)</button>
+      <button class="gbtn" id="btn-inv">Inventaire (I)</button>
+      <button class="gbtn" id="btn-sound">🔊 Son (M)</button>
+    </div>
+
+    <div id="inventory" class="hidden">
+      <h3>Équipement &amp; inventaire <span id="inv-gold"></span></h3>
+      <div class="inv-cols">
+        <div><div class="inv-h">Porté</div><div id="inv-equip"></div></div>
+        <div><div class="inv-h">Sac</div><div id="inv-bag"></div></div>
+      </div>
+      <div class="inv-tip">Cliquez un objet du sac pour l'équiper, une pièce portée pour la retirer. (I pour fermer)</div>
     </div>
 
     <div id="log"></div>
@@ -92,7 +103,7 @@
       <button id="btn-respawn">Renaître à la capitale</button>
     </div>
 
-    <div id="help">ZQSD/WASD : se déplacer · clic : cibler · R : attaque auto · 1-6 : compétences · E : parler au PNJ · F : cible la plus proche · J : quêtes · Entrée : chat</div>
+    <div id="help">ZQSD/WASD : se déplacer · clic : cibler · R : attaque auto · 1-9 : compétences · E : parler au PNJ (entraîneur, armurier…) · F : cible · I : inventaire · J : quêtes · Entrée : chat</div>
   </div>
 
   <script type="module" src="js/main.js"></script>

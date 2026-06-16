@@ -4,6 +4,7 @@
 import {
   WORLD, REALMS, FRONTIER, ARCHETYPES, CLASSES, classById, MOB_TYPES, QUESTS, SHOP, MSG,
   xpForLevel, maxHp, maxPower, MAX_LEVEL,
+  skillCost, EQUIP_SLOTS, weightOfArch, genItem, gearBonus, RARITIES,
 } from '../shared/data.js';
 import { resolveMove, pushApart, entityRadius, capitalTransform } from '../shared/collision.js';
 
@@ -40,6 +41,7 @@ export class Game {
     if (!this.storage || !p || p.kind !== 'player') return;
     this.saves[this.saveKey(p)] = {
       lvl: p.lvl, xp: p.xp, gold: p.gold, items: p.items, quests: p.quests,
+      learned: p.learned, equip: p.equip, bag: p.bag,
       x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, ts: now(),
     };
     this.savesDirty = true;
@@ -50,16 +52,122 @@ export class Game {
     try { this.storage.save(this.saves); this.savesDirty = false; } catch (e) { console.error('save error', e); }
   }
 
+  // ============ STATS, SORTS & ÉQUIPEMENT ============
+  // Recalcule PV/puissance max en intégrant les bonus d'équipement.
+  recalcVitals(p) {
+    const cls = classById(p.cls);
+    if (!cls) return;
+    const gb = gearBonus(p.equip);
+    const hpPct = p.maxHp ? p.hp / p.maxHp : 1;
+    const pwPct = p.maxPower ? p.power / p.maxPower : 1;
+    p.maxHp = Math.round(maxHp(cls, p.lvl) + gb.con * 4 + gb.hp);
+    p.maxPower = Math.round(maxPower(cls, p.lvl) + gb.mag * 2 + gb.power);
+    p.hp = Math.min(p.maxHp, Math.round(p.maxHp * hpPct));
+    p.power = Math.min(p.maxPower, Math.round(p.maxPower * pwPct));
+  }
+
+  // Liste des compétences de la classe pour l'entraîneur (état d'apprentissage inclus).
+  trainerData(p) {
+    const cls = classById(p.cls);
+    return ARCHETYPES[cls.arch].skills.map((sk, slot) => ({
+      slot, name: sk.name || cls.sk[slot] || `Compétence ${slot + 1}`,
+      t: sk.t, lvl: sk.lvl || 1, cd: sk.cd, cost: sk.cost,
+      gold: skillCost(sk.lvl || 1),
+      learned: (p.learned || []).includes(slot),
+    }));
+  }
+
+  onLearn(session, slot) {
+    const p = session.player; if (!p) return;
+    if (!this.npcNear(p, 'trainer')) { this.eventTo(p, "Allez voir l'entraîneur de votre capitale (E).", 'info'); return; }
+    const cls = classById(p.cls);
+    const sk = ARCHETYPES[cls.arch].skills[slot];
+    if (!sk) return;
+    if ((p.learned || []).includes(slot)) { this.eventTo(p, 'Compétence déjà apprise.', 'info'); return; }
+    if (p.lvl < (sk.lvl || 1)) { this.eventTo(p, `Niveau ${sk.lvl} requis pour cette technique.`, 'info'); return; }
+    const cost = skillCost(sk.lvl || 1);
+    if (p.gold < cost) { this.eventTo(p, `Il vous faut ${cost} or pour l'apprendre.`, 'info'); return; }
+    p.gold -= cost; p.learned.push(slot);
+    const name = sk.name || cls.sk[slot] || `Compétence ${slot + 1}`;
+    this.send(session, MSG.EVENT, { text: `Nouvelle compétence apprise : ${name} ! (-${cost} or)`, cat: 'system', trainer: this.trainerData(p) });
+    this.sendSelf(p);
+  }
+
+  // Stock de base de l'armurier, adapté à la classe d'armure du joueur.
+  armorerStock(p) {
+    const cls = classById(p.cls);
+    const w = weightOfArch(cls.arch);
+    const lvl = Math.max(1, p.lvl);
+    const out = [];
+    out.push(genItem({ id: uid(), slot: 'weapon', lvl, rarity: 'commun' }));
+    out.push(genItem({ id: uid(), slot: 'head', lvl, rarity: 'commun', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'chest', lvl, rarity: 'commun', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'feet', lvl, rarity: 'commun', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'ring', lvl, rarity: 'commun' }));
+    out.push(genItem({ id: uid(), slot: 'amulet', lvl, rarity: 'commun' }));
+    out.push(genItem({ id: uid(), slot: 'chest', lvl, rarity: 'rare', weight: w }));
+    out.push(genItem({ id: uid(), slot: 'weapon', lvl, rarity: 'rare' }));
+    return out;
+  }
+
+  onEquip(session, idx) {
+    const p = session.player; if (!p || p.dead) return;
+    const it = p.bag[idx]; if (!it) return;
+    const cls = classById(p.cls);
+    if (it.weight && it.weight !== weightOfArch(cls.arch)) {
+      this.eventTo(p, `Votre classe ne peut porter que l'armure ${weightOfArch(cls.arch)}.`, 'info'); return;
+    }
+    if (p.lvl < (it.lvl || 1)) { this.eventTo(p, `Niveau ${it.lvl} requis pour équiper ${it.name}.`, 'info'); return; }
+    p.bag.splice(idx, 1);
+    const prev = p.equip[it.slot];
+    p.equip[it.slot] = it;
+    if (prev) p.bag.push(prev);
+    this.recalcVitals(p);
+    this.eventTo(p, `Équipé : ${it.name}.`, 'loot');
+    this.sendSelf(p);
+  }
+
+  onUnequip(session, slot) {
+    const p = session.player; if (!p) return;
+    const it = p.equip[slot]; if (!it) return;
+    if (p.bag.length >= 24) { this.eventTo(p, 'Inventaire plein.', 'info'); return; }
+    p.equip[slot] = null; p.bag.push(it);
+    this.recalcVitals(p);
+    this.eventTo(p, `Retiré : ${it.name}.`, 'info');
+    this.sendSelf(p);
+  }
+
+  rollRarity() {
+    const total = RARITIES.reduce((s, r) => s + r.w, 0);
+    let x = Math.random() * total;
+    for (const r of RARITIES) { if ((x -= r.w) <= 0) return r.id; }
+    return 'commun';
+  }
+
+  maybeDropLoot(player, mobLvl, chance) {
+    if (!player || player.kind !== 'player') return;
+    if (Math.random() > chance) return;
+    if (player.bag.length >= 24) { this.eventTo(player, 'Butin perdu : inventaire plein !', 'info'); return; }
+    const slot = pick(EQUIP_SLOTS);
+    const cls = classById(player.cls);
+    const weight = ['head', 'chest', 'feet'].includes(slot) ? weightOfArch(cls.arch) : 'moyenne';
+    const it = genItem({ id: uid(), slot, lvl: Math.max(1, mobLvl), rarity: this.rollRarity(), weight });
+    player.bag.push(it);
+    this.send(player.session, MSG.EVENT, { text: `✦ Butin : ${it.name} [${it.rarity}] !`, cat: 'loot', loot: it });
+    this.sendSelf(player);
+  }
+
   // ============ MONDE INITIAL ============
   spawnWorld() {
     for (const r of REALM_IDS) {
       const base = REALMS[r].base;
       const T = capitalTransform(r); // place les PNJ dans la cour, alignés avec les murailles
       // PNJ de la capitale
-      const pt = T(14, -6), pm = T(-14, -6), pq = T(0, -14);
+      const pt = T(14, -6), pm = T(-14, -6), pq = T(0, -14), pa = T(30, 4);
       this.spawnNpc(r, 'trainer', `Entraîneur de ${REALMS[r].capital}`, pt.x, pt.z);
       this.spawnNpc(r, 'merchant', `Marchand de ${REALMS[r].capital}`, pm.x, pm.z);
       this.spawnNpc(r, 'questgiver', `Émissaire de ${REALMS[r].capital}`, pq.x, pq.z);
+      this.spawnNpc(r, 'armorer', `Armurier de ${REALMS[r].capital}`, pa.x, pa.z);
       // Gardes de la capitale
       for (let i = 0; i < 4; i++) {
         const pg = T((i - 1.5) * 16, -38);
@@ -126,7 +234,7 @@ export class Game {
     const base = REALMS[realm].base;
     const sx = base.x * 0.35 + rand(-40, 40), sz = base.z * 0.35 + rand(-40, 40);
     const e = {
-      id: uid(), kind: 'ai', name: aiName(realm), realm, cls: cls.id, arch: cls.arch,
+      id: uid(), kind: 'ai', name: aiName(realm), realm, race: pick(cls.races), cls: cls.id, arch: cls.arch,
       lvl, x: sx, z: sz, ry: 0, home: { x: sx, z: sz },
       hp: maxHp(cls, lvl), maxHp: maxHp(cls, lvl),
       power: maxPower(cls, lvl), maxPower: maxPower(cls, lvl),
@@ -227,6 +335,9 @@ export class Game {
       case MSG.USE_ITEM: this.onUseItem(session, m.id); break;
       case MSG.RECRUIT: this.onRecruit(session, m.role); break;
       case MSG.RESPAWN: this.onRespawn(session); break;
+      case MSG.LEARN: this.onLearn(session, m.slot); break;
+      case MSG.EQUIP: this.onEquip(session, m.idx); break;
+      case MSG.UNEQUIP: this.onUnequip(session, m.slot); break;
     }
   }
 
@@ -241,6 +352,9 @@ export class Game {
     const p = {
       id: uid(), kind: 'player', name, realm: m.realm, race, cls: cls.id, arch: cls.arch,
       lvl, xp: 0, gold: 50, items: { potion_hp: 1, potion_pw: 1 },
+      learned: [0], // slots de compétences apprises (slot 0 = attaque de base, offert)
+      equip: { weapon: null, head: null, chest: null, feet: null, ring: null, amulet: null },
+      bag: [], // inventaire d'objets ramassés
       x: base.x + rand(-8, 8), z: base.z + rand(-8, 8), ry: 0,
       hp: maxHp(cls, lvl), maxHp: maxHp(cls, lvl),
       power: maxPower(cls, lvl), maxPower: maxPower(cls, lvl),
@@ -259,10 +373,12 @@ export class Game {
       p.gold = sv.gold ?? p.gold;
       p.items = sv.items || p.items;
       p.quests = sv.quests || {};
-      p.maxHp = maxHp(cls, p.lvl); p.hp = p.maxHp;
-      p.maxPower = maxPower(cls, p.lvl); p.power = p.maxPower;
+      if (Array.isArray(sv.learned) && sv.learned.length) p.learned = sv.learned;
+      if (sv.equip) for (const s of EQUIP_SLOTS) p.equip[s] = sv.equip[s] || null;
+      if (Array.isArray(sv.bag)) p.bag = sv.bag;
       if (typeof sv.x === 'number' && typeof sv.z === 'number') { p.x = sv.x; p.z = sv.z; }
     }
+    this.recalcVitals(p); p.hp = p.maxHp; p.power = p.maxPower;
     session.player = p;
     this.entities.set(p.id, p);
     if (restored) this.send(session, MSG.EVENT, { text: `Bon retour, ${name} ! Personnage restauré (niveau ${p.lvl}, ${p.gold} or).`, cat: 'system' });
@@ -279,11 +395,12 @@ export class Game {
     if (!p.session) return;
     this.send(p.session, MSG.SELF, {
       self: {
-        id: p.id, name: p.name, realm: p.realm, cls: p.cls, lvl: p.lvl,
+        id: p.id, name: p.name, realm: p.realm, race: p.race, cls: p.cls, lvl: p.lvl,
         xp: p.xp, xpNext: xpForLevel(p.lvl + 1), gold: p.gold, items: p.items,
         hp: p.hp, maxHp: p.maxHp, power: p.power, maxPower: p.maxPower,
         quests: p.quests, stealthed: p.stealthed, dead: p.dead,
         cooldowns: p.cooldowns,
+        learned: p.learned, equip: p.equip, bag: p.bag,
       },
     });
   }
@@ -302,10 +419,13 @@ export class Game {
     if (e.realm !== p.realm) { this.send(session, MSG.EVENT, { text: 'Ce PNJ ne vous comprend pas.', cat: 'info' }); return; }
     if (e.role === 'trainer') {
       p.hp = p.maxHp; p.power = p.maxPower;
-      this.send(session, MSG.EVENT, { text: `${e.name} : « Reposez-vous, champion. Vous voilà requinqué ! »`, cat: 'npc' });
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Voici les techniques de votre voie. Étudiez, et elles seront vôtres. »`, cat: 'npc', trainer: this.trainerData(p) });
       this.sendSelf(p);
     } else if (e.role === 'merchant') {
-      this.send(session, MSG.EVENT, { text: `${e.name} : « Potions fraîches ! 20 pièces d'or pièce. »`, cat: 'npc', shop: SHOP });
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Potions fraîches ! »`, cat: 'npc', shop: SHOP });
+    } else if (e.role === 'armorer') {
+      session.armory = this.armorerStock(p);
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Armes et armures de qualité pour les braves de ${REALMS[p.realm].name}. »`, cat: 'npc', armory: session.armory });
     } else if (e.role === 'questgiver') {
       const qs = QUESTS[p.realm].map((q) => ({ ...q, state: p.quests[q.id] || null }));
       this.send(session, MSG.EVENT, { text: `${e.name} : « ${REALMS[p.realm].name} a besoin de vous ! »`, cat: 'npc', quests: qs });
@@ -335,13 +455,29 @@ export class Game {
 
   onBuy(session, itemId) {
     const p = session.player;
+    // potions chez le marchand
     const item = SHOP.find((i) => i.id === itemId);
-    if (!item || !this.npcNear(p, 'merchant')) return;
-    if (p.gold < item.price) { this.send(session, MSG.EVENT, { text: "Pas assez d'or !", cat: 'info' }); return; }
-    p.gold -= item.price;
-    p.items[itemId] = (p.items[itemId] || 0) + 1;
-    this.send(session, MSG.EVENT, { text: `Achat : ${item.name}`, cat: 'info' });
-    this.sendSelf(p);
+    if (item) {
+      if (!this.npcNear(p, 'merchant')) return;
+      if (p.gold < item.price) { this.send(session, MSG.EVENT, { text: "Pas assez d'or !", cat: 'info' }); return; }
+      p.gold -= item.price;
+      p.items[itemId] = (p.items[itemId] || 0) + 1;
+      this.send(session, MSG.EVENT, { text: `Achat : ${item.name}`, cat: 'info' });
+      this.sendSelf(p);
+      return;
+    }
+    // équipement chez l'armurier
+    const gear = (session.armory || []).find((i) => i.id === itemId);
+    if (gear) {
+      if (!this.npcNear(p, 'armorer')) return;
+      if (p.gold < gear.value) { this.eventTo(p, "Pas assez d'or !", 'info'); return; }
+      if (p.bag.length >= 24) { this.eventTo(p, 'Inventaire plein.', 'info'); return; }
+      p.gold -= gear.value;
+      p.bag.push({ ...gear, id: uid() });
+      session.armory = session.armory.filter((i) => i.id !== itemId);
+      this.send(session, MSG.EVENT, { text: `Achat : ${gear.name}`, cat: 'loot', armory: session.armory });
+      this.sendSelf(p);
+    }
   }
 
   onUseItem(session, itemId) {
@@ -389,6 +525,7 @@ export class Game {
     const cls = classById(p.cls);
     const sk = ARCHETYPES[cls.arch].skills[slot];
     if (!sk) return;
+    if (!(p.learned || []).includes(slot)) { this.eventTo(p, "Compétence non apprise — voir l'entraîneur (E)."); return; }
     if (p.lvl < (sk.lvl || 1)) { this.eventTo(p, `Compétence apprise au niveau ${sk.lvl}.`); return; }
     const key = 's' + slot;
     const t = now();
@@ -488,9 +625,15 @@ export class Game {
   damageOf(e, type, mult) {
     const cls = e.cls ? classById(e.cls) : null;
     const archDmg = cls ? ARCHETYPES[cls.arch].dmg : 1;
+    const gb = e.kind === 'player' ? gearBonus(e.equip) : null;
     let stat = 50;
-    if (cls) stat = type === 'melee' ? cls.stats.str : type === 'ranged' ? cls.stats.dex : cls.stats.mag;
+    if (cls) {
+      const base = type === 'melee' ? cls.stats.str : type === 'ranged' ? cls.stats.dex : cls.stats.mag;
+      const gs = gb ? (type === 'melee' ? gb.str : type === 'ranged' ? gb.dex : gb.mag) : 0;
+      stat = base + gs;
+    }
     let dmg = (10 + e.lvl * 2.4) * mult * archDmg * (1 + stat / 250);
+    if (gb && (type === 'melee' || type === 'ranged')) dmg += gb.dmg * mult * 0.8; // bonus de l'arme équipée
     const buff = (e.effects || []).find((f) => f.t === 'buff' && f.until > now());
     if (buff) dmg *= 1 + buff.dmgBonus;
     return Math.floor(dmg * rand(0.85, 1.15));
@@ -510,6 +653,11 @@ export class Game {
 
   dealDamage(src, tgt, dmg, label) {
     if (tgt.dead) return;
+    // mitigation par l'armure équipée (joueurs)
+    if (tgt.kind === 'player' && tgt.equip) {
+      const armor = gearBonus(tgt.equip).armor;
+      if (armor > 0) { const mit = armor / (armor + 90 + tgt.lvl * 7); dmg = Math.max(1, Math.round(dmg * (1 - mit))); }
+    }
     tgt.hp -= dmg;
     tgt.lastCombat = now();
     src.lastCombat = now();
@@ -536,6 +684,7 @@ export class Game {
         const gold = irand(2, 6) * victim.lvl;
         credit.gold += gold;
         this.eventTo(credit, `Vous avez vaincu ${victim.name} (+${gold} or).`, 'loot');
+        this.maybeDropLoot(credit, victim.lvl, 0.35);
         this.questCredit(credit, victim.mobType);
       }
     } else if (victim.kind === 'ai' || victim.kind === 'player') {
@@ -544,6 +693,7 @@ export class Game {
         this.gainXp(credit, 60 * victim.lvl);
         this.eventTo(credit, `☠ Vous avez tué ${victim.name} de ${REALMS[victim.realm].name} ! (+points de royaume)`, 'rvr');
         this.questCredit(credit, '__enemy');
+        this.maybeDropLoot(credit, victim.lvl, 0.5);
         this.broadcastEvent(`${credit.name} a tué ${victim.name} (${REALMS[victim.realm].name}) à la frontière !`, 'rvr', credit.realm);
       }
       if (victim.kind === 'player' && victim.session) {
@@ -578,13 +728,12 @@ export class Game {
     while (p.lvl < MAX_LEVEL && p.xp >= xpForLevel(p.lvl + 1)) {
       p.lvl++;
       const cls = classById(p.cls);
-      p.maxHp = maxHp(cls, p.lvl); p.hp = p.maxHp;
-      p.maxPower = maxPower(cls, p.lvl); p.power = p.maxPower;
+      this.recalcVitals(p); p.hp = p.maxHp; p.power = p.maxPower;
       this.eventTo(p, `★ NIVEAU ${p.lvl} ! Vous vous sentez plus puissant.`, 'levelup');
-      // nouvelle compétence débloquée à ce niveau ?
+      // nouvelle(s) technique(s) disponible(s) à l'entraînement ?
       const skills = ARCHETYPES[cls.arch].skills;
-      const ni = skills.findIndex((s) => (s.lvl || 1) === p.lvl);
-      if (ni >= 0) this.eventTo(p, `📜 Nouvelle compétence apprise : ${skills[ni].name || cls.sk[ni]} !`, 'levelup');
+      const avail = skills.filter((s) => (s.lvl || 1) === p.lvl).length;
+      if (avail) this.eventTo(p, "📜 Nouvelle(s) technique(s) à apprendre chez l'entraîneur !", 'levelup');
       this.persistPlayer(p);
       // les compagnons suivent le niveau
       for (const e of this.entities.values()) {
@@ -852,6 +1001,7 @@ export class Game {
           e.id, e.kind, e.name, e.realm || '', e.cls || e.mobType || '', e.lvl,
           Math.round(e.x * 10) / 10, Math.round(e.z * 10) / 10, Math.round((e.ry || 0) * 100) / 100,
           Math.round((e.hp / e.maxHp) * 100), e.dead ? 1 : 0, e.kind === 'npc' ? e.role : '',
+          e.race || '',
         ]);
       }
       this.send(s, MSG.STATE, {
