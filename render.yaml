@@ -1,0 +1,11 @@
+# Déploiement "1 clic" du serveur de jeu sur Render (https://render.com)
+# Dans Render : New + > Blueprint > sélectionnez votre dépôt GitHub.
+services:
+  - type: web
+    name: realms-at-war
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    autoDeploy: true

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Realms at War — MMORPG low poly inspiré de DAoC</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js" } }
+  </script>
+  <!-- ===================================================================
+       MULTIJOUEUR : adresse du serveur de jeu (WebSocket).
+       - Laissez "" si ce client est servi par le serveur Node lui-même.
+       - Si vous hébergez ce client sur votre hébergement (sans Node.js),
+         indiquez l'URL de votre serveur déployé sur Render, par ex :
+         server: "wss://realms-at-war.onrender.com"
+       =================================================================== -->
+  <script>window.RAW_CONFIG = { server: "" };</script>
+</head>
+<body>
+  <!-- ===== Sélection de personnage ===== -->
+  <div id="charselect" class="hidden">
+    <div class="cc-panel cs-panel">
+      <h1>⚔ Realms at War</h1>
+      <p class="cc-sub">Reprenez l'un de vos héros, ou partez en créer un nouveau.<br/>
+        <em>Projet fan inspiré de Dark Age of Camelot — non commercial.</em></p>
+      <div id="cs-list" class="cs-grid"></div>
+      <button id="cs-new" class="cs-newbtn">+ Créer un nouveau personnage</button>
+    </div>
+  </div>
+
+  <!-- ===== Création de personnage ===== -->
+  <div id="charcreate" class="hidden">
+    <div class="cc-panel">
+      <h1>⚔ Realms at War</h1>
+      <p class="cc-sub">Trois royaumes. Quarante-quatre classes. Une guerre sans fin.<br/>
+        <em>Projet fan inspiré de Dark Age of Camelot — non commercial.</em><br/>
+        💾 Votre progression est sauvegardée : reprenez le même nom, royaume et classe pour retrouver votre personnage.</p>
+
+      <h2>1. Choisissez votre royaume</h2>
+      <div id="cc-realms" class="cc-row"></div>
+
+      <h2>2. Choisissez votre classe</h2>
+      <div id="cc-classes" class="cc-grid"></div>
+
+      <div id="cc-detail"></div>
+
+      <h2>3. Choisissez votre race</h2>
+      <div id="cc-races" class="cc-row"></div>
+
+      <h2>4. Votre nom</h2>
+      <input id="cc-name" type="text" maxlength="20" placeholder="Nom du héros" />
+      <button id="cc-go" disabled>Entrer dans le royaume</button>
+    </div>
+  </div>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" class="hidden">
+    <div id="selfframe">
+      <div id="selfname"></div>
+      <div class="bar hpbar"><div id="hpfill"></div><span id="hptext"></span></div>
+      <div class="bar pwbar"><div id="pwfill"></div><span id="pwtext"></span></div>
+      <div class="bar xpbar"><div id="xpfill"></div><span id="xptext"></span></div>
+      <div id="goldtext"></div>
+    </div>
+
+    <div id="targetframe" class="hidden">
+      <div id="targetname"></div>
+      <div class="bar hpbar"><div id="thpfill"></div></div>
+    </div>
+
+    <div id="fortframe">🏰 Fort Central : <span id="fortowner">neutre</span><div class="bar capbar hidden" id="capbarwrap"><div id="capfill"></div></div></div>
+
+    <div id="skillbar"></div>
+
+    <div id="grouppanel">
+      <button class="gbtn" data-role="tank">+ Compagnon tank</button>
+      <button class="gbtn" data-role="healer">+ Compagnon soigneur</button>
+      <button class="gbtn" id="btn-pot-hp">Potion PV (T)</button>
+      <button class="gbtn" id="btn-pot-pw">Potion mana (Y)</button>
+    </div>
+
+    <div id="log"></div>
+    <div id="chatwrap"><input id="chatinput" type="text" maxlength="200" placeholder="Entrée pour parler au royaume..." /></div>
+
+    <div id="questlog" class="hidden"><h3>Journal de quêtes (J)</h3><div id="questlist"></div></div>
+
+    <div id="dialog" class="hidden"></div>
+
+    <div id="deathscreen" class="hidden">
+      <h2>Vous êtes mort.</h2>
+      <button id="btn-respawn">Renaître à la capitale</button>
+    </div>
+
+    <div id="help">ZQSD/WASD : se déplacer · clic : cibler · R : attaque auto · 1-6 : compétences · E : parler au PNJ · F : cible la plus proche · J : quêtes · Entrée : chat</div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

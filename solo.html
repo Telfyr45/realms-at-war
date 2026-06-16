@@ -1,0 +1,2922 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Realms at War — Mode Solo</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0c12; color: #e8e2d0;
+  font-family: 'Segoe UI', system-ui, sans-serif; }
+canvas { display: block; }
+.hidden { display: none !important; }
+
+/* ===== Création de personnage ===== */
+#charcreate { position: fixed; inset: 0; overflow-y: auto; z-index: 100;
+  background: radial-gradient(ellipse at top, #1d2438 0%, #0a0c12 70%); }
+.cc-panel { max-width: 980px; margin: 24px auto; padding: 28px;
+  background: rgba(12,14,22,.92); border: 1px solid #3a3f55; border-radius: 12px; }
+.cc-panel h1 { font-size: 34px; letter-spacing: 2px; color: #f0d889; text-align: center; }
+.cc-sub { text-align: center; color: #9aa0b5; margin: 8px 0 20px; }
+.cc-panel h2 { font-size: 16px; color: #c9b873; margin: 18px 0 8px; border-bottom: 1px solid #2c3147; padding-bottom: 4px; }
+.cc-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.cc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.cc-card { padding: 10px 12px; background: #161a28; border: 1px solid #2c3147; border-radius: 8px;
+  cursor: pointer; transition: all .12s; user-select: none; }
+.cc-card:hover { border-color: #f0d889; }
+.cc-card.sel { border-color: #f0d889; background: #232842; box-shadow: 0 0 12px rgba(240,216,137,.25); }
+.cc-card .t { font-weight: 600; }
+.cc-card .s { font-size: 12px; color: #9aa0b5; }
+.realm-card { flex: 1; min-width: 200px; border-top: 4px solid var(--rc, #888); }
+#cc-detail { margin-top: 10px; padding: 12px; background: #11141f; border-radius: 8px;
+  font-size: 13px; color: #b9c0d4; min-height: 20px; }
+#cc-detail b { color: #f0d889; }
+#cc-name { width: 100%; padding: 10px; margin-top: 6px; background: #161a28; color: #e8e2d0;
+  border: 1px solid #2c3147; border-radius: 8px; font-size: 16px; }
+#cc-go { width: 100%; margin-top: 16px; padding: 14px; font-size: 18px; font-weight: 700;
+  background: linear-gradient(#8a6d1f, #6b520f); color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+#cc-go:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ===== Sélection de personnage ===== */
+#charselect { position: fixed; inset: 0; overflow-y: auto; z-index: 100;
+  background: radial-gradient(ellipse at top, #1d2438 0%, #0a0c12 70%); }
+.cs-panel { max-width: 760px; }
+.cs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 10px; }
+.cs-card { position: relative; padding: 16px; background: #161a28; border: 1px solid #2c3147;
+  border-left: 5px solid var(--rc, #888); border-radius: 10px; cursor: pointer; transition: all .12s; user-select: none; }
+.cs-card:hover { border-color: #f0d889; background: #1d2238; transform: translateY(-2px); }
+.cs-name { font-size: 20px; font-weight: 700; color: #f0d889; }
+.cs-line { margin-top: 4px; font-size: 14px; }
+.cs-line .cs-realm { color: var(--rc, #ccc); font-weight: 600; }
+.cs-sub { font-size: 12px; color: #9aa0b5; margin-top: 2px; }
+.cs-stats { font-size: 13px; color: #c9b873; margin-top: 8px; }
+.cs-play { margin-top: 10px; font-size: 13px; font-weight: 700; color: #7ee08a; opacity: .85; }
+.cs-del { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; line-height: 1;
+  background: #2c3147; color: #c9a; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; opacity: .6; }
+.cs-del:hover { background: #7a2b2b; color: #fff; opacity: 1; }
+.cs-newbtn { width: 100%; margin-top: 18px; padding: 14px; font-size: 16px; font-weight: 700;
+  background: linear-gradient(#2d3450, #1c2138); color: #e8e2d0; border: 1px solid #3a3f55; border-radius: 8px; cursor: pointer; }
+.cs-newbtn:hover { border-color: #f0d889; color: #f0d889; }
+
+/* ===== HUD ===== */
+#hud > div { position: fixed; z-index: 10; }
+#selfframe { top: 12px; left: 12px; width: 260px; padding: 10px;
+  background: rgba(10,12,18,.8); border: 1px solid #3a3f55; border-radius: 8px; }
+#selfname { font-weight: 700; color: #f0d889; margin-bottom: 6px; }
+.bar { position: relative; height: 16px; background: #1a1d2a; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.bar > div { height: 100%; width: 100%; transition: width .15s; }
+.bar > span { position: absolute; inset: 0; font-size: 11px; text-align: center; line-height: 16px; color: #fff; text-shadow: 0 1px 2px #000; }
+#hpfill, #thpfill { background: linear-gradient(#c0392b, #8e2418); }
+#pwfill { background: linear-gradient(#2980b9, #1a5276); }
+#xpfill { background: linear-gradient(#b39328, #7d660e); }
+.xpbar { height: 8px; }
+#goldtext { margin-top: 6px; font-size: 12px; color: #f0d889; }
+#targetframe { top: 12px; left: 290px; width: 220px; padding: 10px;
+  background: rgba(10,12,18,.8); border: 1px solid #3a3f55; border-radius: 8px; }
+#targetname { font-size: 13px; margin-bottom: 4px; }
+#fortframe { top: 12px; right: 12px; padding: 10px 14px; background: rgba(10,12,18,.8);
+  border: 1px solid #3a3f55; border-radius: 8px; font-size: 13px; }
+.capbar { width: 160px; height: 8px; margin-top: 6px; }
+#capfill { background: #f0d889; width: 0; }
+
+#skillbar { bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+.skill { position: relative; width: 64px; height: 64px; background: rgba(15,18,30,.9);
+  border: 1px solid #4a5070; border-radius: 8px; cursor: pointer; overflow: hidden;
+  font-size: 10px; color: #cfd6ea; text-align: center; padding: 4px 2px; user-select: none; }
+.skill:hover { border-color: #f0d889; }
+.skill .key { position: absolute; top: 2px; left: 5px; color: #f0d889; font-weight: 700; font-size: 12px; }
+.skill .nm { margin-top: 14px; line-height: 1.15; display: block; }
+.skill .cdov { position: absolute; inset: 0; background: rgba(0,0,0,.7); display: flex;
+  align-items: center; justify-content: center; font-size: 18px; color: #fff; }
+.skill.locked { opacity: .45; cursor: not-allowed; }
+.skill .lk { position: absolute; bottom: 2px; right: 4px; color: #ffe45c; font-size: 10px; font-weight: 700; }
+
+#grouppanel { bottom: 14px; left: 12px; display: flex; flex-direction: column; gap: 6px; }
+.gbtn { padding: 8px 10px; background: rgba(15,18,30,.9); color: #cfd6ea; border: 1px solid #4a5070;
+  border-radius: 6px; cursor: pointer; font-size: 12px; }
+.gbtn:hover { border-color: #f0d889; }
+
+#log { bottom: 96px; left: 12px; width: 360px; max-height: 200px; overflow-y: auto;
+  font-size: 12px; padding: 8px; background: rgba(8,10,16,.65); border-radius: 8px; pointer-events: none; }
+#log p { margin: 1px 0; }
+.c-combat { color: #d8d3c2; } .c-loot { color: #f0d889; } .c-xp { color: #b08fff; }
+.c-quest { color: #7fd4ff; } .c-rvr { color: #ff7d6b; } .c-levelup { color: #ffe45c; font-weight: 700; }
+.c-system { color: #8d96ad; } .c-npc { color: #9be09b; } .c-group { color: #7fffc4; }
+.c-info { color: #aab2c8; } .c-chat { color: #9fc3ff; }
+
+#chatwrap { bottom: 64px; left: 12px; width: 360px; }
+#chatinput { width: 100%; padding: 7px; background: rgba(15,18,30,.9); color: #e8e2d0;
+  border: 1px solid #4a5070; border-radius: 6px; display: none; }
+#chatinput.open { display: block; }
+
+#questlog { top: 80px; right: 12px; width: 300px; padding: 12px; background: rgba(10,12,18,.9);
+  border: 1px solid #3a3f55; border-radius: 8px; }
+#questlog h3 { color: #f0d889; font-size: 14px; margin-bottom: 8px; }
+.quest-entry { margin-bottom: 8px; font-size: 12px; border-bottom: 1px solid #232842; padding-bottom: 6px; }
+.quest-entry .qn { color: #7fd4ff; font-weight: 600; }
+.quest-entry .done { color: #7fffc4; }
+
+#dialog { top: 50%; left: 50%; transform: translate(-50%,-50%); width: 420px; max-height: 70vh; overflow-y: auto;
+  padding: 16px; background: rgba(12,14,22,.97); border: 1px solid #c9b873; border-radius: 10px; }
+#dialog h3 { color: #f0d889; margin-bottom: 8px; }
+#dialog .dbtn { display: block; width: 100%; text-align: left; margin-top: 6px; padding: 8px 10px;
+  background: #161a28; color: #e8e2d0; border: 1px solid #2c3147; border-radius: 6px; cursor: pointer; font-size: 13px; }
+#dialog .dbtn:hover { border-color: #f0d889; }
+#dialog .close { margin-top: 12px; text-align: center; background: #2c3147; }
+
+#deathscreen { inset: 0; background: rgba(40,0,0,.6); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px; }
+#deathscreen h2 { font-size: 40px; color: #ff6b5b; text-shadow: 0 2px 12px #000; }
+#btn-respawn { padding: 14px 28px; font-size: 18px; background: #6b520f; color: #fff;
+  border: none; border-radius: 8px; cursor: pointer; }
+
+#help { bottom: 0; left: 50%; transform: translateX(-50%); font-size: 11px; color: #707890;
+  padding: 3px 10px; background: rgba(8,10,16,.6); border-radius: 6px 6px 0 0; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <!-- ===== Sélection de personnage ===== -->
+  <div id="charselect" class="hidden">
+    <div class="cc-panel cs-panel">
+      <h1>⚔ Realms at War</h1>
+      <p class="cc-sub">Reprenez l'un de vos héros, ou partez en créer un nouveau.<br/>
+        <em>Projet fan inspiré de Dark Age of Camelot — non commercial.</em></p>
+      <div id="cs-list" class="cs-grid"></div>
+      <button id="cs-new" class="cs-newbtn">+ Créer un nouveau personnage</button>
+    </div>
+  </div>
+
+  <!-- ===== Création de personnage ===== -->
+  <div id="charcreate" class="hidden">
+    <div class="cc-panel">
+      <h1>⚔ Realms at War</h1>
+      <p class="cc-sub">Trois royaumes. Quarante-quatre classes. Une guerre sans fin. — MODE SOLO<br/>
+        <em>Projet fan inspiré de Dark Age of Camelot — non commercial.</em><br/>
+        💾 Votre progression est sauvegardée : reprenez le même nom, royaume et classe pour retrouver votre personnage.</p>
+
+      <h2>1. Choisissez votre royaume</h2>
+      <div id="cc-realms" class="cc-row"></div>
+
+      <h2>2. Choisissez votre classe</h2>
+      <div id="cc-classes" class="cc-grid"></div>
+
+      <div id="cc-detail"></div>
+
+      <h2>3. Choisissez votre race</h2>
+      <div id="cc-races" class="cc-row"></div>
+
+      <h2>4. Votre nom</h2>
+      <input id="cc-name" type="text" maxlength="20" placeholder="Nom du héros" />
+      <button id="cc-go" disabled>Entrer dans le royaume</button>
+    </div>
+  </div>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" class="hidden">
+    <div id="selfframe">
+      <div id="selfname"></div>
+      <div class="bar hpbar"><div id="hpfill"></div><span id="hptext"></span></div>
+      <div class="bar pwbar"><div id="pwfill"></div><span id="pwtext"></span></div>
+      <div class="bar xpbar"><div id="xpfill"></div><span id="xptext"></span></div>
+      <div id="goldtext"></div>
+    </div>
+
+    <div id="targetframe" class="hidden">
+      <div id="targetname"></div>
+      <div class="bar hpbar"><div id="thpfill"></div></div>
+    </div>
+
+    <div id="fortframe">🏰 Fort Central : <span id="fortowner">neutre</span><div class="bar capbar hidden" id="capbarwrap"><div id="capfill"></div></div></div>
+
+    <div id="skillbar"></div>
+
+    <div id="grouppanel">
+      <button class="gbtn" data-role="tank">+ Compagnon tank</button>
+      <button class="gbtn" data-role="healer">+ Compagnon soigneur</button>
+      <button class="gbtn" id="btn-pot-hp">Potion PV (T)</button>
+      <button class="gbtn" id="btn-pot-pw">Potion mana (Y)</button>
+    </div>
+
+    <div id="log"></div>
+    <div id="chatwrap"><input id="chatinput" type="text" maxlength="200" placeholder="Entrée : message (mode solo)..." /></div>
+
+    <div id="questlog" class="hidden"><h3>Journal de quêtes (J)</h3><div id="questlist"></div></div>
+
+    <div id="dialog" class="hidden"></div>
+
+    <div id="deathscreen" class="hidden">
+      <h2>Vous êtes mort.</h2>
+      <button id="btn-respawn">Renaître à la capitale</button>
+    </div>
+
+    <div id="help">ZQSD/WASD : se déplacer · clic : cibler · R : attaque auto · 1-6 : compétences · E : parler au PNJ · F : cible la plus proche · J : quêtes · Entrée : chat</div>
+  </div>
+
+<script type="module">
+// ============================================================
+// REALMS AT WAR — Données partagées client/serveur
+// Jeu inspiré de Dark Age of Camelot (projet fan, non commercial)
+// ============================================================
+
+const WORLD = {
+  size: 3600, // carte de -1800 à +1800
+  tickMs: 100,
+  broadcastMs: 150,
+  viewRange: 470,
+};
+
+// Grande zone frontalière centrale (RvR) commune aux 3 royaumes, reliée par des
+// routes aux 3 capitales, avec le Fort Central à capturer en son cœur.
+const FRONTIER = {
+  center: { x: 0, z: 0 },
+  radius: 560,    // rayon de la grande zone centrale
+  fortRadius: 56, // rayon des murailles du Fort Central
+};
+
+const REALMS = {
+  alb: {
+    id: 'alb', name: 'Albion', color: 0xc03030, colorCss: '#c03030',
+    capital: 'Camelot', desc: "Le royaume du Roi Arthur. Chevalerie, foi et acier.",
+    base: { x: -1083, z: 625 },
+    races: ['Breton', 'Avalonien', 'Highlander', 'Sarrasin', 'Inconnu', 'Demi-Ogre'],
+  },
+  hib: {
+    id: 'hib', name: 'Hibernia', color: 0x30a040, colorCss: '#30a040',
+    capital: 'Tir na Nog', desc: "Le royaume celte. Nature, magie ancienne et fureur sauvage.",
+    base: { x: 1083, z: 625 },
+    races: ['Celte', 'Firbolg', 'Lurikeen', 'Elfe', 'Sylvan', 'Shar'],
+  },
+  mid: {
+    id: 'mid', name: 'Midgard', color: 0x3060c0, colorCss: '#3060c0',
+    capital: 'Jordheim', desc: "Le royaume viking. Glace, runes et rage du Nord.",
+    base: { x: 0, z: -1250 },
+    races: ['Norrois', 'Troll', 'Nain', 'Kobold', 'Valkyn', 'Frostalf'],
+  },
+};
+
+// ------------------------------------------------------------
+// Archétypes : modèles de compétences (4 slots par classe)
+// t: melee|ranged|spell|dot|heal|groupheal|hot|buff|stun|root|mez|stealth|aoe
+// p: puissance (multiplicateur), cd: recharge (s), cost: power, rng: portée
+// ------------------------------------------------------------
+const ARCHETYPES = {
+  tank: {
+    label: 'Combattant', hp: 1.25, power: 0.6, dmg: 1.0,
+    skills: [
+      { t: 'melee', p: 1.6, cd: 6, cost: 5, rng: 4, lvl: 1 },
+      { t: 'stun', p: 0.8, cd: 20, cost: 10, rng: 4, dur: 3, lvl: 4 },
+      { t: 'dot', p: 0.9, cd: 12, cost: 8, rng: 4, dur: 9, lvl: 8 },
+      { t: 'buff', p: 0.25, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 12 },
+      { t: 'aoe', p: 1.5, cd: 16, cost: 14, rng: 6, lvl: 20, name: "Tourbillon d'acier" },
+      { t: 'melee', p: 3.0, cd: 25, cost: 18, rng: 4, lvl: 30, name: 'Frappe dévastatrice' },
+    ],
+  },
+  hybrid: {
+    label: 'Hybride', hp: 1.1, power: 0.85, dmg: 0.9,
+    skills: [
+      { t: 'melee', p: 1.4, cd: 5, cost: 5, rng: 4, lvl: 1 },
+      { t: 'heal', p: 0.9, cd: 14, cost: 15, rng: 0, lvl: 4 },
+      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 0, dur: 20, lvl: 8 },
+      { t: 'melee', p: 1.9, cd: 12, cost: 10, rng: 4, lvl: 12 },
+      { t: 'spell', p: 1.6, cd: 8, cost: 12, rng: 30, lvl: 20, name: 'Châtiment' },
+      { t: 'buff', p: 0.45, cd: 40, cost: 16, rng: 0, dur: 20, lvl: 30, name: 'Aura de puissance' },
+    ],
+  },
+  healer: {
+    label: 'Soigneur', hp: 0.95, power: 1.2, dmg: 0.7,
+    skills: [
+      { t: 'heal', p: 1.5, cd: 3, cost: 12, rng: 30, lvl: 1 },
+      { t: 'groupheal', p: 1.0, cd: 10, cost: 22, rng: 30, lvl: 4 },
+      { t: 'spell', p: 1.1, cd: 4, cost: 8, rng: 35, lvl: 8 },
+      { t: 'buff', p: 0.2, cd: 30, cost: 12, rng: 30, dur: 25, lvl: 12 },
+      { t: 'heal', p: 2.6, cd: 12, cost: 25, rng: 30, lvl: 20, name: 'Grâce majeure' },
+      { t: 'aoe', p: 1.6, cd: 18, cost: 20, rng: 30, lvl: 30, name: 'Châtiment céleste' },
+    ],
+  },
+  caster: {
+    label: 'Mage', hp: 0.8, power: 1.3, dmg: 1.0,
+    skills: [
+      { t: 'spell', p: 1.8, cd: 3, cost: 9, rng: 38, lvl: 1 },
+      { t: 'dot', p: 1.1, cd: 8, cost: 10, rng: 35, dur: 12, lvl: 4 },
+      { t: 'root', p: 0, cd: 15, cost: 10, rng: 35, dur: 6, lvl: 8 },
+      { t: 'aoe', p: 1.3, cd: 12, cost: 18, rng: 30, lvl: 12 },
+      { t: 'spell', p: 2.6, cd: 8, cost: 16, rng: 38, lvl: 20, name: 'Frappe du néant' },
+      { t: 'aoe', p: 2.0, cd: 20, cost: 26, rng: 32, lvl: 30, name: 'Cataclysme' },
+    ],
+  },
+  stealth: {
+    label: 'Furtif', hp: 0.95, power: 0.8, dmg: 1.1,
+    skills: [
+      { t: 'stealth', p: 0, cd: 8, cost: 5, rng: 0, lvl: 1 },
+      { t: 'melee', p: 2.6, cd: 8, cost: 8, rng: 4, fromStealth: 2, lvl: 4 },
+      { t: 'dot', p: 1.0, cd: 10, cost: 8, rng: 4, dur: 12, lvl: 8 },
+      { t: 'buff', p: 0.3, cd: 30, cost: 10, rng: 0, dur: 15, lvl: 12 },
+      { t: 'melee', p: 3.6, cd: 16, cost: 12, rng: 4, fromStealth: 2.2, lvl: 20, name: 'Lame fatale' },
+      { t: 'buff', p: 0.5, cd: 40, cost: 14, rng: 0, dur: 15, lvl: 30, name: 'Danse des ombres' },
+    ],
+  },
+  archer: {
+    label: 'Archer', hp: 1.0, power: 0.8, dmg: 1.0,
+    skills: [
+      { t: 'ranged', p: 1.7, cd: 4, cost: 6, rng: 40, lvl: 1 },
+      { t: 'ranged', p: 2.4, cd: 10, cost: 12, rng: 45, lvl: 4 },
+      { t: 'root', p: 0.4, cd: 18, cost: 10, rng: 38, dur: 5, lvl: 8 },
+      { t: 'melee', p: 1.3, cd: 6, cost: 5, rng: 4, lvl: 12 },
+      { t: 'aoe', p: 1.6, cd: 15, cost: 14, rng: 38, lvl: 20, name: 'Pluie de flèches' },
+      { t: 'ranged', p: 3.4, cd: 20, cost: 16, rng: 45, lvl: 30, name: 'Tir perçant' },
+    ],
+  },
+  support: {
+    label: 'Barde', hp: 1.0, power: 1.0, dmg: 0.8,
+    skills: [
+      { t: 'hot', p: 0.7, cd: 8, cost: 12, rng: 30, dur: 12, lvl: 1 },
+      { t: 'buff', p: 0.35, cd: 20, cost: 10, rng: 0, dur: 15, lvl: 4 },
+      { t: 'spell', p: 1.3, cd: 4, cost: 8, rng: 32, lvl: 8 },
+      { t: 'mez', p: 0, cd: 20, cost: 14, rng: 32, dur: 6, lvl: 12 },
+      { t: 'buff', p: 0.5, cd: 30, cost: 14, rng: 0, dur: 18, lvl: 20, name: 'Hymne héroïque' },
+      { t: 'aoe', p: 1.8, cd: 18, cost: 20, rng: 30, lvl: 30, name: 'Crescendo' },
+    ],
+  },
+};
+
+// ------------------------------------------------------------
+// Les 44 classes de Dark Age of Camelot
+// stats: str/con/dex/qui/mag (mag = stat de magie, libellé via magStat)
+// sk: noms des 4 compétences (mappées sur le modèle d'archétype)
+// ------------------------------------------------------------
+const C = (id, name, realm, arch, weapon, magStat, stats, races, sk) =>
+  ({ id, name, realm, arch, weapon, magStat, stats, races, sk });
+
+const CLASSES = [
+  // ===================== ALBION (15) =====================
+  C('armsman', "Maître d'Armes", 'alb', 'tank', 'Hallebarde', null,
+    { str: 80, con: 75, dex: 55, qui: 50, mag: 0 },
+    ['Breton', 'Avalonien', 'Highlander', 'Sarrasin', 'Inconnu', 'Demi-Ogre'],
+    ['Frappe de hallebarde', 'Coup de bouclier', 'Entaille profonde', 'Cri de garde']),
+  C('paladin', 'Paladin', 'alb', 'tank', 'Épée à deux mains', 'pie',
+    { str: 70, con: 70, dex: 55, qui: 50, mag: 40 },
+    ['Breton', 'Avalonien', 'Highlander', 'Sarrasin'],
+    ['Lame sacrée', 'Jugement', 'Brûlure divine', 'Chant de protection']),
+  C('mercenary', 'Mercenaire', 'alb', 'tank', 'Doubles lames', null,
+    { str: 72, con: 65, dex: 70, qui: 65, mag: 0 },
+    ['Breton', 'Highlander', 'Sarrasin', 'Inconnu', 'Demi-Ogre'],
+    ['Double frappe', 'Coup assommant', 'Lacération', 'Frénésie de duelliste']),
+  C('reaver', 'Faucheur', 'alb', 'hybrid', 'Fléau', 'pie',
+    { str: 68, con: 65, dex: 60, qui: 55, mag: 45 },
+    ['Breton', 'Sarrasin', 'Inconnu'],
+    ['Fléau des âmes', 'Drain vital', 'Pacte sombre', 'Vague de douleur']),
+  C('cleric', 'Clerc', 'alb', 'healer', 'Masse', 'pie',
+    { str: 50, con: 60, dex: 55, qui: 50, mag: 80 },
+    ['Breton', 'Avalonien', 'Highlander'],
+    ['Soin majeur', 'Prière de groupe', 'Châtiment', 'Bouclier de foi']),
+  C('friar', 'Moine', 'alb', 'hybrid', 'Bâton', 'pie',
+    { str: 60, con: 65, dex: 70, qui: 65, mag: 55 },
+    ['Breton', 'Highlander'],
+    ['Volée de bâton', 'Méditation curative', 'Ferveur', 'Tourbillon du pèlerin']),
+  C('heretic', 'Hérétique', 'alb', 'hybrid', "Fléau d'armes", 'pie',
+    { str: 62, con: 62, dex: 60, qui: 55, mag: 60 },
+    ['Breton', 'Avalonien', 'Sarrasin', 'Inconnu'],
+    ['Fléau hérétique', 'Absolution inversée', 'Feu intérieur', 'Flammes du blasphème']),
+  C('infiltrator', 'Sicaire', 'alb', 'stealth', 'Dagues', null,
+    { str: 60, con: 55, dex: 80, qui: 75, mag: 0 },
+    ['Breton', 'Sarrasin', 'Inconnu'],
+    ['Camouflage', 'Perforation des reins', 'Lame empoisonnée', 'Esquive parfaite']),
+  C('scout', 'Éclaireur', 'alb', 'archer', 'Arc long', null,
+    { str: 58, con: 58, dex: 78, qui: 70, mag: 0 },
+    ['Breton', 'Highlander', 'Sarrasin'],
+    ["Tir d'arc long", 'Tir critique', 'Flèche entravante', "Coup d'épée courte"]),
+  C('minstrel', 'Ménestrel', 'alb', 'support', 'Épée et luth', 'cha',
+    { str: 58, con: 58, dex: 68, qui: 65, mag: 60 },
+    ['Breton', 'Highlander', 'Sarrasin'],
+    ['Ballade régénérante', 'Chant de célérité', 'Accord perçant', 'Berceuse']),
+  C('cabalist', 'Cabaliste', 'alb', 'caster', 'Bâton arcanique', 'int',
+    { str: 40, con: 50, dex: 60, qui: 55, mag: 85 },
+    ['Breton', 'Avalonien', 'Sarrasin', 'Inconnu', 'Demi-Ogre'],
+    ['Lance spirituelle', 'Essaim corrosif', 'Entraves de matière', 'Explosion du golem']),
+  C('sorcerer', 'Sorcier', 'alb', 'caster', 'Bâton arcanique', 'int',
+    { str: 40, con: 48, dex: 60, qui: 55, mag: 88 },
+    ['Breton', 'Avalonien', 'Sarrasin', 'Demi-Ogre'],
+    ['Trait mental', "Érosion de l'esprit", 'Emprise paralysante', 'Tempête psychique']),
+  C('theurgist', 'Théurgiste', 'alb', 'caster', 'Bâton élémentaire', 'int',
+    { str: 40, con: 50, dex: 60, qui: 55, mag: 85 },
+    ['Breton', 'Avalonien', 'Demi-Ogre'],
+    ['Javelot de givre', 'Morsure du vent', 'Prison de terre', 'Nuée élémentaire']),
+  C('wizard', 'Thaumaturge', 'alb', 'caster', 'Bâton élémentaire', 'int',
+    { str: 38, con: 48, dex: 60, qui: 55, mag: 90 },
+    ['Breton', 'Avalonien', 'Demi-Ogre'],
+    ['Boule de feu', 'Combustion', 'Gel des chevilles', 'Pluie de météores']),
+  C('necromancer', 'Nécromancien', 'alb', 'caster', 'Bâton occulte', 'int',
+    { str: 40, con: 52, dex: 58, qui: 52, mag: 86 },
+    ['Breton', 'Avalonien', 'Sarrasin', 'Inconnu'],
+    ['Dard nécrotique', 'Peste rampante', 'Étreinte des morts', 'Nova de douleur']),
+
+  // ===================== HIBERNIA (15) =====================
+  C('animist', 'Animiste', 'hib', 'caster', 'Bâton vivant', 'int',
+    { str: 40, con: 50, dex: 60, qui: 55, mag: 86 },
+    ['Celte', 'Firbolg', 'Sylvan'],
+    ['Dard de bogue', 'Spores virulentes', 'Racines vivantes', 'Éruption fongique']),
+  C('bainshee', 'Bainshee', 'hib', 'caster', 'Bâton spectral', 'int',
+    { str: 38, con: 48, dex: 60, qui: 55, mag: 88 },
+    ['Celte', 'Lurikeen', 'Elfe'],
+    ['Cri spectral', 'Lamentation', 'Voile glaçant', 'Onde hurlante']),
+  C('bard', 'Barde', 'hib', 'support', 'Lame et harpe', 'cha',
+    { str: 55, con: 58, dex: 65, qui: 62, mag: 62 },
+    ['Celte', 'Firbolg'],
+    ['Mélodie vivifiante', 'Chant du voyageur', 'Note discordante', 'Hymne du sommeil']),
+  C('blademaster', 'Finelame', 'hib', 'tank', 'Doubles lames', null,
+    { str: 70, con: 65, dex: 72, qui: 68, mag: 0 },
+    ['Celte', 'Firbolg', 'Elfe', 'Shar'],
+    ['Danse des lames', 'Garde brisée', 'Taillade', 'Posture du vent']),
+  C('champion', 'Champion', 'hib', 'hybrid', 'Lame à deux mains', 'int',
+    { str: 68, con: 66, dex: 60, qui: 56, mag: 45 },
+    ['Celte', 'Lurikeen', 'Elfe', 'Shar'],
+    ['Taille héroïque', 'Vigueur du champion', 'Faiblesse exposée', 'Estoc fulgurant']),
+  C('druid', 'Druide', 'hib', 'healer', 'Bâton noueux', 'emp',
+    { str: 50, con: 60, dex: 55, qui: 50, mag: 80 },
+    ['Celte', 'Firbolg', 'Sylvan'],
+    ['Sève régénératrice', 'Pluie purificatrice', 'Colère de la nature', 'Écorce protectrice']),
+  C('eldritch', 'Eldritch', 'hib', 'caster', 'Bâton du vide', 'int',
+    { str: 38, con: 46, dex: 60, qui: 56, mag: 90 },
+    ['Lurikeen', 'Elfe'],
+    ['Lance du vide', 'Dégénérescence', 'Entrave du néant', 'Implosion']),
+  C('enchanter', 'Enchanteur', 'hib', 'caster', 'Bâton féérique', 'int',
+    { str: 40, con: 48, dex: 60, qui: 56, mag: 87 },
+    ['Lurikeen', 'Elfe'],
+    ['Trait enchanté', 'Chaleur dévorante', 'Liens scintillants', "Cascade d'étincelles"]),
+  C('hero', 'Protecteur', 'hib', 'tank', 'Lance celtique', null,
+    { str: 78, con: 76, dex: 55, qui: 50, mag: 0 },
+    ['Celte', 'Firbolg', 'Lurikeen', 'Shar', 'Sylvan'],
+    ['Charge du protecteur', 'Mur de bouclier', 'Lacération de lance', 'Cœur de chêne']),
+  C('mentalist', 'Mentaliste', 'hib', 'caster', 'Bâton mental', 'int',
+    { str: 40, con: 50, dex: 60, qui: 55, mag: 86 },
+    ['Celte', 'Lurikeen', 'Elfe', 'Shar'],
+    ['Fouet mental', 'Tourment', 'Cage psychique', 'Résonance douloureuse']),
+  C('nightshade', 'Ombre Nocturne', 'hib', 'stealth', 'Lames empoisonnées', 'int',
+    { str: 58, con: 54, dex: 80, qui: 76, mag: 30 },
+    ['Lurikeen', 'Elfe'],
+    ["Voile d'ombre", 'Lame dans le dos', 'Venin nocturne', "Pas de l'ombre"]),
+  C('ranger', 'Rôdeur', 'hib', 'archer', 'Arc recourbé', null,
+    { str: 58, con: 56, dex: 78, qui: 72, mag: 0 },
+    ['Celte', 'Lurikeen', 'Elfe', 'Shar', 'Sylvan'],
+    ['Tir précis', 'Flèche du crépuscule', 'Flèche de ronces', 'Riposte aux lames']),
+  C('valewalker', 'Arpenteur du Val', 'hib', 'hybrid', 'Faux', 'int',
+    { str: 70, con: 66, dex: 58, qui: 54, mag: 50 },
+    ['Celte', 'Firbolg', 'Sylvan'],
+    ['Moisson de la faux', 'Sève vitale', 'Aubaine sylvestre', 'Faucheuse tournoyante']),
+  C('vampiir', 'Vampiir', 'hib', 'hybrid', 'Griffes', 'dex',
+    { str: 66, con: 62, dex: 74, qui: 70, mag: 40 },
+    ['Celte', 'Lurikeen', 'Shar'],
+    ['Morsure sanglante', 'Drain de vie', 'Vélocité vampirique', 'Déchiquetage']),
+  C('warden', 'Sentinelle', 'hib', 'hybrid', 'Lame et bouclier', 'emp',
+    { str: 62, con: 66, dex: 58, qui: 54, mag: 55 },
+    ['Celte', 'Firbolg', 'Sylvan'],
+    ['Frappe de la sentinelle', 'Baume sylvestre', 'Bulle de protection', 'Représailles']),
+
+  // ===================== MIDGARD (14) =====================
+  C('berserker', 'Berserker', 'mid', 'tank', 'Haches jumelles', null,
+    { str: 78, con: 68, dex: 62, qui: 60, mag: 0 },
+    ['Norrois', 'Troll', 'Nain', 'Valkyn'],
+    ['Déchaînement', 'Coup étourdissant', 'Hache sanglante', 'Rage du fauve']),
+  C('bonedancer', "Danseur d'Os", 'mid', 'caster', "Bâton d'ossements", 'pie',
+    { str: 40, con: 52, dex: 58, qui: 52, mag: 86 },
+    ['Kobold', 'Troll', 'Valkyn', 'Frostalf'],
+    ["Trait d'os", 'Pourriture', 'Étreinte squelettique', 'Danse macabre']),
+  C('healer', 'Guérisseur', 'mid', 'healer', 'Masse runique', 'pie',
+    { str: 48, con: 58, dex: 55, qui: 50, mag: 82 },
+    ['Norrois', 'Nain', 'Frostalf'],
+    ['Guérison runique', 'Cercle de soins', 'Marteau de fureur', 'Augure de vigueur']),
+  C('hunter', 'Chasseur', 'mid', 'archer', 'Arc composite', null,
+    { str: 60, con: 58, dex: 76, qui: 70, mag: 0 },
+    ['Norrois', 'Kobold', 'Nain', 'Valkyn', 'Frostalf'],
+    ['Tir du chasseur', 'Flèche mortelle', 'Piège givrant', 'Coup de lance']),
+  C('runemaster', "Prêtre d'Odin", 'mid', 'caster', 'Bâton runique', 'pie',
+    { str: 38, con: 48, dex: 60, qui: 55, mag: 90 },
+    ['Norrois', 'Kobold', 'Nain', 'Frostalf'],
+    ['Rune de destruction', 'Rune de décomposition', "Rune d'entrave", 'Déluge runique']),
+  C('savage', 'Sauvage', 'mid', 'tank', 'Griffes de combat', null,
+    { str: 74, con: 64, dex: 70, qui: 70, mag: 0 },
+    ['Norrois', 'Troll', 'Nain', 'Kobold', 'Valkyn'],
+    ['Griffes déchirantes', 'Coup de boutoir', 'Hémorragie', 'Transe guerrière']),
+  C('shadowblade', "Lame de l'Ombre", 'mid', 'stealth', 'Lames nordiques', null,
+    { str: 62, con: 56, dex: 78, qui: 74, mag: 0 },
+    ['Norrois', 'Kobold', 'Valkyn'],
+    ["Linceul d'ombre", 'Assassinat', 'Lame gangrenée', "Réflexes d'ombre"]),
+  C('shaman', 'Chaman', 'mid', 'healer', 'Bâton totémique', 'pie',
+    { str: 50, con: 62, dex: 54, qui: 50, mag: 80 },
+    ['Troll', 'Kobold', 'Frostalf'],
+    ['Soin des esprits', 'Fontaine totémique', "Crachat d'acide", 'Peau de pierre']),
+  C('skald', 'Skald', 'mid', 'support', 'Marteau et voix', 'cha',
+    { str: 64, con: 62, dex: 60, qui: 58, mag: 55 },
+    ['Norrois', 'Troll', 'Nain', 'Kobold'],
+    ['Chant de guerre', 'Hymne de marche', 'Cri tonitruant', 'Complainte hypnotique']),
+  C('spiritmaster', 'Maître des Esprits', 'mid', 'caster', 'Bâton spirituel', 'pie',
+    { str: 40, con: 50, dex: 58, qui: 54, mag: 87 },
+    ['Norrois', 'Kobold', 'Frostalf'],
+    ['Lance spectrale', 'Tourment des âmes', 'Chaînes spirituelles', 'Vortex des esprits']),
+  C('thane', 'Thane', 'mid', 'hybrid', 'Marteau de tonnerre', 'pie',
+    { str: 70, con: 68, dex: 58, qui: 54, mag: 48 },
+    ['Norrois', 'Troll', 'Nain', 'Frostalf'],
+    ['Marteau de Thor', "Bénédiction d'Asgard", 'Appel de la foudre', 'Frappe orageuse']),
+  C('valkyrie', 'Valkyrie', 'mid', 'hybrid', "Lance d'Odin", 'pie',
+    { str: 66, con: 64, dex: 62, qui: 58, mag: 50 },
+    ['Norrois', 'Frostalf'],
+    ['Lance des élus', 'Grâce de Freya', 'Aura des Walkyries', "Jugement d'Odin"]),
+  C('warlock', 'Sorcier Noir', 'mid', 'caster', 'Bâton maudit', 'pie',
+    { str: 38, con: 50, dex: 58, qui: 54, mag: 88 },
+    ['Norrois', 'Kobold', 'Frostalf'],
+    ['Malédiction primaire', 'Chaos rampant', 'Geôle maudite', 'Détonation du chaos']),
+  C('warrior', 'Guerrier', 'mid', 'tank', 'Hache et bouclier', null,
+    { str: 80, con: 78, dex: 54, qui: 50, mag: 0 },
+    ['Norrois', 'Troll', 'Nain', 'Kobold', 'Valkyn'],
+    ['Frappe de hache', 'Bouclier écrasant', 'Entaille barbare', 'Cri de Jordheim']),
+];
+
+const classById = (id) => CLASSES.find((c) => c.id === id);
+const classesOfRealm = (r) => CLASSES.filter((c) => c.realm === r);
+
+const MAG_LABELS = { int: 'Intelligence', pie: 'Piété', emp: 'Empathie', cha: 'Charisme', dex: 'Dextérité' };
+
+// ------------------------------------------------------------
+// Progression
+// ------------------------------------------------------------
+const MAX_LEVEL = 50;
+const xpForLevel = (lvl) => Math.floor(40 * Math.pow(lvl, 2.1));
+const maxHp = (cls, lvl) => Math.floor((120 + lvl * 22 + cls.stats.con * 1.5) * ARCHETYPES[cls.arch].hp);
+const maxPower = (cls, lvl) => Math.floor((80 + lvl * 14 + cls.stats.mag) * ARCHETYPES[cls.arch].power);
+
+// ------------------------------------------------------------
+// Mobs PvE (par royaume) et frontière
+// ------------------------------------------------------------
+const MOB_TYPES = {
+  alb: [
+    { id: 'bandit', name: 'Bandit de grand chemin', lvl: [1, 4] },
+    { id: 'boar', name: 'Sanglier furieux', lvl: [3, 7] },
+    { id: 'undead', name: 'Squelette romain', lvl: [6, 11] },
+    { id: 'giant', name: 'Géant des collines', lvl: [10, 16] },
+  ],
+  hib: [
+    { id: 'sprite', name: 'Lutin malicieux', lvl: [1, 4] },
+    { id: 'wolf', name: 'Loup de Connacht', lvl: [3, 7] },
+    { id: 'fomor', name: 'Fomoire', lvl: [6, 11] },
+    { id: 'treant', name: 'Sylvanien corrompu', lvl: [10, 16] },
+  ],
+  mid: [
+    { id: 'rat', name: 'Rat des neiges', lvl: [1, 4] },
+    { id: 'svartalf', name: 'Svartalf', lvl: [3, 7] },
+    { id: 'draugr', name: 'Draugr', lvl: [6, 11] },
+    { id: 'jotun', name: 'Jotun des glaces', lvl: [10, 16] },
+  ],
+  frontier: [
+    { id: 'outlaw', name: 'Maraudeur frontalier', lvl: [12, 18] },
+    { id: 'drake', name: 'Drake des frontières', lvl: [14, 22] },
+    { id: 'wraith', name: 'Spectre de guerre', lvl: [16, 24] },
+  ],
+};
+
+// ------------------------------------------------------------
+// Quêtes (3 par royaume)
+// ------------------------------------------------------------
+const QUESTS = {
+  alb: [
+    { id: 'alb_q1', name: 'Nettoyer les routes', desc: 'Tuez 5 bandits de grand chemin.', target: 'bandit', count: 5, xp: 400, gold: 30 },
+    { id: 'alb_q2', name: 'La menace des collines', desc: 'Abattez 3 géants des collines.', target: 'giant', count: 3, xp: 1500, gold: 80 },
+    { id: 'alb_q3', name: 'Pour la gloire de Camelot', desc: "Tuez 2 ennemis d'un royaume adverse en zone frontalière.", target: '__enemy', count: 2, xp: 2500, gold: 150 },
+  ],
+  hib: [
+    { id: 'hib_q1', name: 'Petites pestes', desc: 'Tuez 5 lutins malicieux.', target: 'sprite', count: 5, xp: 400, gold: 30 },
+    { id: 'hib_q2', name: 'La forêt souillée', desc: 'Détruisez 3 sylvaniens corrompus.', target: 'treant', count: 3, xp: 1500, gold: 80 },
+    { id: 'hib_q3', name: 'Pour Hibernia !', desc: "Tuez 2 ennemis d'un royaume adverse en zone frontalière.", target: '__enemy', count: 2, xp: 2500, gold: 150 },
+  ],
+  mid: [
+    { id: 'mid_q1', name: 'Vermine des neiges', desc: 'Tuez 5 rats des neiges.', target: 'rat', count: 5, xp: 400, gold: 30 },
+    { id: 'mid_q2', name: 'Le réveil des morts', desc: 'Renvoyez 3 draugar à la tombe.', target: 'draugr', count: 3, xp: 1500, gold: 80 },
+    { id: 'mid_q3', name: 'Pour Midgard !', desc: "Tuez 2 ennemis d'un royaume adverse en zone frontalière.", target: '__enemy', count: 2, xp: 2500, gold: 150 },
+  ],
+};
+
+// ------------------------------------------------------------
+// Objets de marchand
+// ------------------------------------------------------------
+const SHOP = [
+  { id: 'potion_hp', name: 'Potion de soin', price: 20, heal: 0.5 },
+  { id: 'potion_pw', name: 'Potion de mana', price: 20, power: 0.5 },
+];
+
+// ------------------------------------------------------------
+// Messages réseau
+// ------------------------------------------------------------
+const MSG = {
+  // client -> serveur
+  CREATE: 'create', MOVE: 'move', SKILL: 'skill', ATTACK: 'attack', TARGET: 'target',
+  CHAT: 'chat', QUEST_ACCEPT: 'qaccept', QUEST_TURNIN: 'qturnin', BUY: 'buy', USE_ITEM: 'useitem',
+  RECRUIT: 'recruit', RESPAWN: 'respawn', INTERACT: 'interact',
+  // serveur -> client
+  WELCOME: 'welcome', STATE: 'state', EVENT: 'event', SELF: 'self', CHAT_BC: 'chatbc', DEAD: 'dead',
+};
+// ============================================================
+// Collisions & décor déterministe (partagé client/serveur)
+// Le décor est généré avec un PRNG seedé : client (rendu) et
+// serveur (collisions) voient exactement les mêmes obstacles.
+// ============================================================
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// distance d'un point (px,pz) au segment [(x1,z1)-(x2,z2)]
+function distToSegment(px, pz, x1, z1, x2, z2) {
+  const vx = x2 - x1, vz = z2 - z1;
+  const len2 = vx * vx + vz * vz || 1;
+  let t = ((px - x1) * vx + (pz - z1) * vz) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + vx * t), pz - (z1 + vz * t));
+}
+
+// ---------- Décor (arbres / rochers) ----------
+const SCENERY = [];
+{
+  const rnd = mulberry32(20260612);
+  // densité proportionnelle à la surface de la nouvelle carte (3600²)
+  for (let i = 0; i < 560; i++) {
+    const x = (rnd() - 0.5) * WORLD.size * 0.92;
+    const z = (rnd() - 0.5) * WORLD.size * 0.92;
+    const isTree = rnd() < 0.75;
+    const rot = rnd() * 6.28;
+    // dégager le cœur du Fort Central et l'esplanade de capture
+    if (Math.hypot(x, z) < FRONTIER.fortRadius + 40) continue;
+    // dégager les routes qui relient chaque capitale au centre
+    if (Object.values(REALMS).some((r) => distToSegment(x, z, 0, 0, r.base.x, r.base.z) < 22)) continue;
+    if (Object.values(REALMS).some((r) => Math.hypot(x - r.base.x, z - r.base.z) < 115)) continue;
+    SCENERY.push({ x, z, type: isTree ? 'tree' : 'rock', rot });
+  }
+}
+
+// ---------- Obstacles statiques ----------
+const OBSTACLES = { circles: [], segments: [] };
+for (const s of SCENERY) {
+  OBSTACLES.circles.push({ x: s.x, z: s.z, r: s.type === 'tree' ? 1.2 : 2.6 });
+}
+
+// transformation locale -> monde d'une capitale (même rotation que le rendu)
+function capitalTransform(realm) {
+  const base = REALMS[realm].base;
+  const ang = Math.atan2(-base.x, -base.z) + Math.PI;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  return (lx, lz) => ({ x: lx * c + lz * s + base.x, z: -lx * s + lz * c + base.z });
+}
+
+for (const rid of Object.keys(REALMS)) {
+  const T = capitalTransform(rid);
+  const seg = (x1, z1, x2, z2, rad) => {
+    const a = T(x1, z1), b = T(x2, z2);
+    OBSTACLES.segments.push({ x1: a.x, z1: a.z, x2: b.x, z2: b.z, r: rad });
+  };
+  // murailles (l'avant, côté centre de la carte, reste ouvert)
+  seg(-55, 42, 55, 42, 2.5);
+  seg(-55, -44, -55, 44, 2.5);
+  seg(55, -44, 55, 44, 2.5);
+  // tours d'angle
+  for (const [tx, tz] of [[-55, 42], [55, 42], [-55, -42], [55, -42]]) {
+    const p = T(tx, tz);
+    OBSTACLES.circles.push({ x: p.x, z: p.z, r: 7.5 });
+  }
+  // donjon
+  const k = T(0, 20);
+  OBSTACLES.circles.push({ x: k.x, z: k.z, r: 13 });
+  // maisons
+  for (let i = 0; i < 6; i++) {
+    const h = T(-40 + (i % 3) * 32 + 6, -20 + Math.floor(i / 3) * 38);
+    OBSTACLES.circles.push({ x: h.x, z: h.z, r: 7.2 });
+  }
+}
+
+// ---------- Fort Central renforcé (enceinte octogonale, 4 ouvertures franchissables) ----------
+{
+  const FR = FRONTIER.fortRadius;          // rayon des murailles
+  const panHalf = FR * 0.62;               // demi-longueur d'un pan de muraille
+  for (let a = 1; a < 8; a += 2) {
+    const ang = (a / 8) * Math.PI * 2;
+    const cx = Math.cos(ang) * FR, cz = Math.sin(ang) * FR;
+    const dx = -Math.sin(ang), dz = Math.cos(ang);
+    OBSTACLES.segments.push({ x1: cx - dx * panHalf, z1: cz - dz * panHalf, x2: cx + dx * panHalf, z2: cz + dz * panHalf, r: 2.8 });
+  }
+  // 4 tours d'angle
+  for (let a = 0; a < 4; a++) {
+    const ang = (a / 4) * Math.PI * 2 + Math.PI / 4;
+    OBSTACLES.circles.push({ x: Math.cos(ang) * FR, z: Math.sin(ang) * FR, r: 8 });
+  }
+  // donjon central (point de capture sur son pourtour)
+  OBSTACLES.circles.push({ x: 0, z: 0, r: 17 });
+}
+
+// ---------- Résolution ----------
+const BOUND = WORLD.size / 2 - 60; // les montagnes bordent la carte
+
+function entityRadius(kind) {
+  return kind === 'mob' ? 1.6 : kind === 'guard' ? 1.3 : 1.0;
+}
+
+// pousse (x,z) hors des obstacles statiques + bornes du monde
+function resolveMove(x, z, rad) {
+  x = Math.max(-BOUND, Math.min(BOUND, x));
+  z = Math.max(-BOUND, Math.min(BOUND, z));
+  for (const c of OBSTACLES.circles) {
+    const min = rad + c.r;
+    const dx = x - c.x, dz = z - c.z;
+    if (dx > min || dx < -min || dz > min || dz < -min) continue;
+    const d = Math.hypot(dx, dz);
+    if (d < min) {
+      if (d < 0.001) { x = c.x + min; continue; }
+      x = c.x + (dx / d) * min;
+      z = c.z + (dz / d) * min;
+    }
+  }
+  for (const s of OBSTACLES.segments) {
+    const min = rad + s.r;
+    if (x < Math.min(s.x1, s.x2) - min || x > Math.max(s.x1, s.x2) + min ||
+        z < Math.min(s.z1, s.z2) - min || z > Math.max(s.z1, s.z2) + min) continue;
+    const vx = s.x2 - s.x1, vz = s.z2 - s.z1;
+    let t = ((x - s.x1) * vx + (z - s.z1) * vz) / (vx * vx + vz * vz);
+    t = Math.max(0, Math.min(1, t));
+    const px = s.x1 + vx * t, pz = s.z1 + vz * t;
+    const dx = x - px, dz = z - pz;
+    const d = Math.hypot(dx, dz);
+    if (d < min && d > 0.001) {
+      x = px + (dx / d) * min;
+      z = pz + (dz / d) * min;
+    }
+  }
+  return { x, z };
+}
+
+// pousse (x,z) hors des autres entités (cercles {x,z,r})
+function pushApart(x, z, rad, others) {
+  for (const o of others) {
+    const min = rad + o.r;
+    const dx = x - o.x, dz = z - o.z;
+    if (dx > min || dx < -min || dz > min || dz < -min) continue;
+    const d = Math.hypot(dx, dz);
+    if (d < min) {
+      if (d < 0.001) { x = o.x + min; continue; }
+      x = o.x + (dx / d) * min;
+      z = o.z + (dz / d) * min;
+    }
+  }
+  return { x, z };
+}
+// ============================================================
+// REALMS AT WAR — logique de jeu serveur (autoritaire)
+// ============================================================
+
+let NEXT_ID = 1;
+const uid = () => 'e' + (NEXT_ID++);
+const now = () => Date.now();
+const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+const rand = (a, b) => a + Math.random() * (b - a);
+const irand = (a, b) => Math.floor(rand(a, b + 1));
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+const REALM_IDS = ['alb', 'hib', 'mid'];
+const HALF = WORLD.size / 2;
+
+// ------------------------------------------------------------
+class Game {
+  constructor(storage = null) {
+    this.entities = new Map(); // id -> entity
+    this.sessions = new Set();
+    this.fort = { x: 0, z: 0, owner: null, progress: 0, capturer: null };
+    // sauvegarde des personnages (fichier côté serveur, localStorage en solo)
+    this.storage = storage;
+    this.saves = {};
+    this.savesDirty = false;
+    try { this.saves = (storage && storage.load()) || {}; } catch { this.saves = {}; }
+    this.spawnWorld();
+  }
+
+  // ============ SAUVEGARDE ============
+  saveKey(p) { return `${p.name.toLowerCase()}|${p.realm}|${p.cls}`; }
+
+  persistPlayer(p) {
+    if (!this.storage || !p || p.kind !== 'player') return;
+    this.saves[this.saveKey(p)] = {
+      lvl: p.lvl, xp: p.xp, gold: p.gold, items: p.items, quests: p.quests,
+      x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, ts: now(),
+    };
+    this.savesDirty = true;
+  }
+
+  flushSaves() {
+    if (!this.storage || !this.savesDirty) return;
+    try { this.storage.save(this.saves); this.savesDirty = false; } catch (e) { console.error('save error', e); }
+  }
+
+  // ============ MONDE INITIAL ============
+  spawnWorld() {
+    for (const r of REALM_IDS) {
+      const base = REALMS[r].base;
+      const T = capitalTransform(r); // place les PNJ dans la cour, alignés avec les murailles
+      // PNJ de la capitale
+      const pt = T(14, -6), pm = T(-14, -6), pq = T(0, -14);
+      this.spawnNpc(r, 'trainer', `Entraîneur de ${REALMS[r].capital}`, pt.x, pt.z);
+      this.spawnNpc(r, 'merchant', `Marchand de ${REALMS[r].capital}`, pm.x, pm.z);
+      this.spawnNpc(r, 'questgiver', `Émissaire de ${REALMS[r].capital}`, pq.x, pq.z);
+      // Gardes de la capitale
+      for (let i = 0; i < 4; i++) {
+        const pg = T((i - 1.5) * 16, -38);
+        this.spawnGuard(r, pg.x, pg.z);
+      }
+      // Camps de mobs PvE entre la base et le centre
+      const dirX = (0 - base.x), dirZ = (0 - base.z);
+      const len = Math.hypot(dirX, dirZ);
+      const ux = dirX / len, uz = dirZ / len;
+      MOB_TYPES[r].forEach((mt, idx) => {
+        const d = 140 + idx * 130; // camps de plus en plus loin = plus haut niveau
+        const cx = base.x + ux * d, cz = base.z + uz * d;
+        for (let i = 0; i < 4; i++) {
+          this.spawnMob(r, mt, cx + rand(-35, 35), cz + rand(-35, 35));
+        }
+      });
+      // IA RvR ennemies : 5 par royaume, près du centre côté royaume
+      for (let i = 0; i < 5; i++) this.spawnAiPlayer(r);
+    }
+    // Mobs de la grande zone frontalière centrale : répartis tout autour du Fort Central
+    for (const mt of MOB_TYPES.frontier) {
+      for (let i = 0; i < 7; i++) {
+        const ang = rand(0, Math.PI * 2);
+        const rad = rand(FRONTIER.fortRadius + 55, FRONTIER.radius);
+        this.spawnMob('frontier', mt, Math.cos(ang) * rad, Math.sin(ang) * rad);
+      }
+    }
+  }
+
+  spawnNpc(realm, role, name, x, z) {
+    const e = {
+      id: uid(), kind: 'npc', role, name, realm, lvl: 50,
+      x, z, ry: 0, hp: 5000, maxHp: 5000, dead: false,
+    };
+    this.entities.set(e.id, e);
+    return e;
+  }
+
+  spawnGuard(realm, x, z) {
+    const e = {
+      id: uid(), kind: 'guard', name: `Garde de ${REALMS[realm].name}`, realm,
+      lvl: 30, x, z, ry: 0, home: { x, z },
+      hp: 3000, maxHp: 3000, dead: false, targetId: null, swingAt: 0,
+    };
+    this.entities.set(e.id, e);
+    return e;
+  }
+
+  spawnMob(zone, mt, x, z) {
+    const lvl = irand(mt.lvl[0], mt.lvl[1]);
+    const e = {
+      id: uid(), kind: 'mob', mobType: mt.id, name: mt.name, realm: null, zone,
+      lvl, x, z, ry: rand(0, 6.28), home: { x, z },
+      hp: 60 + lvl * 30, maxHp: 60 + lvl * 30, dead: false,
+      targetId: null, swingAt: 0, effects: [],
+    };
+    this.entities.set(e.id, e);
+    return e;
+  }
+
+  spawnAiPlayer(realm) {
+    const cls = pick(CLASSES.filter((c) => c.realm === realm));
+    const lvl = irand(15, 25);
+    const base = REALMS[realm].base;
+    const sx = base.x * 0.35 + rand(-40, 40), sz = base.z * 0.35 + rand(-40, 40);
+    const e = {
+      id: uid(), kind: 'ai', name: aiName(realm), realm, cls: cls.id, arch: cls.arch,
+      lvl, x: sx, z: sz, ry: 0, home: { x: sx, z: sz },
+      hp: maxHp(cls, lvl), maxHp: maxHp(cls, lvl),
+      power: maxPower(cls, lvl), maxPower: maxPower(cls, lvl),
+      dead: false, targetId: null, swingAt: 0, effects: [], cooldowns: {}, stealthed: false,
+      aiState: 'patrol', waypoint: null,
+    };
+    this.entities.set(e.id, e);
+    return e;
+  }
+
+  spawnCompanion(owner, type) {
+    const realm = owner.realm;
+    const pool = CLASSES.filter((c) => c.realm === realm && c.arch === (type === 'healer' ? 'healer' : 'tank'));
+    const cls = pick(pool);
+    const e = {
+      id: uid(), kind: 'companion', name: `${cls.name} (compagnon)`, realm, cls: cls.id, arch: cls.arch,
+      lvl: owner.lvl, ownerId: owner.id,
+      x: owner.x + rand(-4, 4), z: owner.z + rand(-4, 4), ry: 0,
+      hp: maxHp(cls, owner.lvl), maxHp: maxHp(cls, owner.lvl),
+      power: maxPower(cls, owner.lvl), maxPower: maxPower(cls, owner.lvl),
+      dead: false, targetId: null, swingAt: 0, effects: [], cooldowns: {},
+    };
+    this.entities.set(e.id, e);
+    return e;
+  }
+
+  // ============ CONNEXIONS ============
+  addConnection(ws) {
+    const session = { ws, player: null };
+    this.sessions.add(session);
+    return session;
+  }
+
+  removeConnection(session) {
+    this.sessions.delete(session);
+    if (session.player) {
+      this.persistPlayer(session.player);
+      this.flushSaves();
+      // supprime aussi les compagnons
+      for (const e of this.entities.values()) {
+        if (e.kind === 'companion' && e.ownerId === session.player.id) this.entities.delete(e.id);
+      }
+      this.entities.delete(session.player.id);
+      this.broadcastEvent(`${session.player.name} a quitté le royaume.`, 'system');
+    }
+  }
+
+  send(session, type, data) {
+    if (session.ws.readyState === 1) session.ws.send(JSON.stringify({ type, ...data }));
+  }
+
+  broadcastEvent(text, cat = 'info', realmOnly = null) {
+    for (const s of this.sessions) {
+      if (!s.player) continue;
+      if (realmOnly && s.player.realm !== realmOnly) continue;
+      this.send(s, MSG.EVENT, { text, cat });
+    }
+  }
+
+  // ============ MESSAGES CLIENT ============
+  handleMessage(session, m) {
+    if (m.type === MSG.CREATE) return this.onCreate(session, m);
+    const p = session.player;
+    if (!p) return;
+    switch (m.type) {
+      case MSG.MOVE: {
+        if (p.dead || this.hasEffect(p, 'root') || this.hasEffect(p, 'stun') || this.hasEffect(p, 'mez')) break;
+        const nx = clamp(m.x, -HALF, HALF), nz = clamp(m.z, -HALF, HALF);
+        const d = Math.hypot(nx - p.x, nz - p.z);
+        if (d < 30) { // anti-téléportation grossier
+          if (d > 0.5 && p.stealthed === false) p.lastMove = now();
+          const c = this.applyCollisions(p, nx, nz);
+          p.x = c.x; p.z = c.z; p.ry = m.ry || 0;
+        }
+        break;
+      }
+      case MSG.TARGET: p.targetId = m.id || null; break;
+      case MSG.ATTACK: {
+        p.autoAttack = !!m.on;
+        if (p.autoAttack) p.stealthed = false;
+        break;
+      }
+      case MSG.SKILL: this.useSkill(p, m.slot); break;
+      case MSG.CHAT: {
+        const text = String(m.text || '').slice(0, 200);
+        if (!text) break;
+        for (const s of this.sessions) {
+          if (s.player && s.player.realm === p.realm) {
+            this.send(s, MSG.CHAT_BC, { from: p.name, text });
+          }
+        }
+        break;
+      }
+      case MSG.INTERACT: this.onInteract(session, m.id); break;
+      case MSG.QUEST_ACCEPT: this.onQuestAccept(session, m.id); break;
+      case MSG.QUEST_TURNIN: this.onQuestTurnin(session, m.id); break;
+      case MSG.BUY: this.onBuy(session, m.id); break;
+      case MSG.USE_ITEM: this.onUseItem(session, m.id); break;
+      case MSG.RECRUIT: this.onRecruit(session, m.role); break;
+      case MSG.RESPAWN: this.onRespawn(session); break;
+    }
+  }
+
+  onCreate(session, m) {
+    if (session.player) return;
+    const cls = classById(m.cls);
+    if (!cls || !REALMS[m.realm] || cls.realm !== m.realm) return;
+    const race = REALMS[m.realm].races.includes(m.race) ? m.race : cls.races[0];
+    const name = String(m.name || 'Aventurier').replace(/[^\p{L}\p{N} '-]/gu, '').slice(0, 20) || 'Aventurier';
+    const base = REALMS[m.realm].base;
+    const lvl = 1;
+    const p = {
+      id: uid(), kind: 'player', name, realm: m.realm, race, cls: cls.id, arch: cls.arch,
+      lvl, xp: 0, gold: 50, items: { potion_hp: 1, potion_pw: 1 },
+      x: base.x + rand(-8, 8), z: base.z + rand(-8, 8), ry: 0,
+      hp: maxHp(cls, lvl), maxHp: maxHp(cls, lvl),
+      power: maxPower(cls, lvl), maxPower: maxPower(cls, lvl),
+      dead: false, targetId: null, autoAttack: false, swingAt: 0,
+      effects: [], cooldowns: {}, stealthed: false, lastCombat: 0,
+      quests: {}, // id -> {progress, done}
+      session,
+    };
+    // restauration d'une sauvegarde existante (même nom + royaume + classe)
+    const sv = this.saves[this.saveKey(p)];
+    let restored = false;
+    if (sv && sv.lvl >= 1) {
+      restored = true;
+      p.lvl = Math.min(sv.lvl, MAX_LEVEL);
+      p.xp = sv.xp || 0;
+      p.gold = sv.gold ?? p.gold;
+      p.items = sv.items || p.items;
+      p.quests = sv.quests || {};
+      p.maxHp = maxHp(cls, p.lvl); p.hp = p.maxHp;
+      p.maxPower = maxPower(cls, p.lvl); p.power = p.maxPower;
+      if (typeof sv.x === 'number' && typeof sv.z === 'number') { p.x = sv.x; p.z = sv.z; }
+    }
+    session.player = p;
+    this.entities.set(p.id, p);
+    if (restored) this.send(session, MSG.EVENT, { text: `Bon retour, ${name} ! Personnage restauré (niveau ${p.lvl}, ${p.gold} or).`, cat: 'system' });
+    this.send(session, MSG.WELCOME, {
+      selfId: p.id,
+      spawn: { x: p.x, z: p.z }, // position réelle (restaurée le cas échéant)
+      fort: { x: this.fort.x, z: this.fort.z, owner: this.fort.owner },
+    });
+    this.sendSelf(p);
+    this.broadcastEvent(`${name} (${cls.name}) rejoint ${REALMS[m.realm].name} !`, 'system', m.realm);
+  }
+
+  sendSelf(p) {
+    if (!p.session) return;
+    this.send(p.session, MSG.SELF, {
+      self: {
+        id: p.id, name: p.name, realm: p.realm, cls: p.cls, lvl: p.lvl,
+        xp: p.xp, xpNext: xpForLevel(p.lvl + 1), gold: p.gold, items: p.items,
+        hp: p.hp, maxHp: p.maxHp, power: p.power, maxPower: p.maxPower,
+        quests: p.quests, stealthed: p.stealthed, dead: p.dead,
+        cooldowns: p.cooldowns,
+      },
+    });
+  }
+
+  // ============ INTERACTIONS PNJ ============
+  npcNear(p, role, range = 12) {
+    for (const e of this.entities.values()) {
+      if (e.kind === 'npc' && e.role === role && e.realm === p.realm && dist(e, p) < range) return e;
+    }
+    return null;
+  }
+
+  onInteract(session, id) {
+    const p = session.player; const e = this.entities.get(id);
+    if (!e || e.kind !== 'npc' || dist(e, p) > 12) return;
+    if (e.realm !== p.realm) { this.send(session, MSG.EVENT, { text: 'Ce PNJ ne vous comprend pas.', cat: 'info' }); return; }
+    if (e.role === 'trainer') {
+      p.hp = p.maxHp; p.power = p.maxPower;
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Reposez-vous, champion. Vous voilà requinqué ! »`, cat: 'npc' });
+      this.sendSelf(p);
+    } else if (e.role === 'merchant') {
+      this.send(session, MSG.EVENT, { text: `${e.name} : « Potions fraîches ! 20 pièces d'or pièce. »`, cat: 'npc', shop: SHOP });
+    } else if (e.role === 'questgiver') {
+      const qs = QUESTS[p.realm].map((q) => ({ ...q, state: p.quests[q.id] || null }));
+      this.send(session, MSG.EVENT, { text: `${e.name} : « ${REALMS[p.realm].name} a besoin de vous ! »`, cat: 'npc', quests: qs });
+    }
+  }
+
+  onQuestAccept(session, qid) {
+    const p = session.player;
+    const q = QUESTS[p.realm].find((x) => x.id === qid);
+    if (!q || p.quests[qid] || !this.npcNear(p, 'questgiver')) return;
+    p.quests[qid] = { progress: 0, done: false };
+    this.send(session, MSG.EVENT, { text: `Quête acceptée : ${q.name}`, cat: 'quest' });
+    this.sendSelf(p);
+  }
+
+  onQuestTurnin(session, qid) {
+    const p = session.player;
+    const q = QUESTS[p.realm].find((x) => x.id === qid);
+    const st = p.quests[qid];
+    if (!q || !st || st.done || st.progress < q.count || !this.npcNear(p, 'questgiver')) return;
+    st.done = true;
+    p.gold += q.gold;
+    this.gainXp(p, q.xp);
+    this.send(session, MSG.EVENT, { text: `Quête terminée : ${q.name} (+${q.xp} XP, +${q.gold} or)`, cat: 'quest' });
+    this.sendSelf(p);
+  }
+
+  onBuy(session, itemId) {
+    const p = session.player;
+    const item = SHOP.find((i) => i.id === itemId);
+    if (!item || !this.npcNear(p, 'merchant')) return;
+    if (p.gold < item.price) { this.send(session, MSG.EVENT, { text: "Pas assez d'or !", cat: 'info' }); return; }
+    p.gold -= item.price;
+    p.items[itemId] = (p.items[itemId] || 0) + 1;
+    this.send(session, MSG.EVENT, { text: `Achat : ${item.name}`, cat: 'info' });
+    this.sendSelf(p);
+  }
+
+  onUseItem(session, itemId) {
+    const p = session.player;
+    const item = SHOP.find((i) => i.id === itemId);
+    if (!item || !(p.items[itemId] > 0) || p.dead) return;
+    p.items[itemId]--;
+    if (item.heal) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * item.heal));
+    if (item.power) p.power = Math.min(p.maxPower, p.power + Math.floor(p.maxPower * item.power));
+    this.send(session, MSG.EVENT, { text: `Vous utilisez : ${item.name}`, cat: 'info' });
+    this.sendSelf(p);
+  }
+
+  onRecruit(session, role) {
+    const p = session.player;
+    const owned = [...this.entities.values()].filter((e) => e.kind === 'companion' && e.ownerId === p.id);
+    if (owned.length >= 2) { this.send(session, MSG.EVENT, { text: 'Votre groupe est complet (2 compagnons max).', cat: 'info' }); return; }
+    const c = this.spawnCompanion(p, role === 'healer' ? 'healer' : 'tank');
+    this.send(session, MSG.EVENT, { text: `${c.name} rejoint votre groupe !`, cat: 'group' });
+  }
+
+  onRespawn(session) {
+    const p = session.player;
+    if (!p.dead) return;
+    const base = REALMS[p.realm].base;
+    p.dead = false; p.hp = Math.floor(p.maxHp * 0.6); p.power = Math.floor(p.maxPower * 0.6);
+    p.x = base.x + rand(-8, 8); p.z = base.z + rand(-8, 8);
+    p.effects = []; p.targetId = null; p.autoAttack = false;
+    this.sendSelf(p);
+  }
+
+  // ============ COMPÉTENCES & COMBAT ============
+  hasEffect(e, t) { return e.effects && e.effects.some((f) => f.t === t && f.until > now()); }
+
+  group(p) {
+    const g = [p];
+    for (const e of this.entities.values()) {
+      if (e.kind === 'companion' && e.ownerId === p.id && !e.dead) g.push(e);
+    }
+    return g;
+  }
+
+  useSkill(p, slot) {
+    if (p.dead || this.hasEffect(p, 'stun') || this.hasEffect(p, 'mez')) return;
+    const cls = classById(p.cls);
+    const sk = ARCHETYPES[cls.arch].skills[slot];
+    if (!sk) return;
+    if (p.lvl < (sk.lvl || 1)) { this.eventTo(p, `Compétence apprise au niveau ${sk.lvl}.`); return; }
+    const key = 's' + slot;
+    const t = now();
+    if ((p.cooldowns[key] || 0) > t) return;
+    const cost = sk.cost * (1 + p.lvl * 0.06);
+    if (p.power < cost) { this.eventTo(p, 'Pas assez de puissance !'); return; }
+    const skillName = sk.name || cls.sk[slot];
+
+    // ciblage
+    let target = p.targetId ? this.entities.get(p.targetId) : null;
+    const offensive = ['melee', 'ranged', 'spell', 'dot', 'aoe', 'stun', 'root', 'mez'].includes(sk.t);
+    if (offensive) {
+      if (!target || target.dead || !this.isEnemy(p, target)) { this.eventTo(p, 'Cible invalide.'); return; }
+      const rng = sk.rng < 6 ? 6 : sk.rng;
+      if (dist(p, target) > rng) { this.eventTo(p, 'Cible trop éloignée.'); return; }
+    }
+
+    p.power -= Math.floor(cost);
+    p.cooldowns[key] = t + sk.cd * 1000;
+    p.lastCombat = t;
+
+    switch (sk.t) {
+      case 'melee': case 'ranged': case 'spell': {
+        let mult = sk.p;
+        if (sk.fromStealth && p.stealthed) mult *= sk.fromStealth;
+        p.stealthed = false;
+        const dmg = this.damageOf(p, sk.t, mult);
+        this.dealDamage(p, target, dmg, skillName);
+        break;
+      }
+      case 'dot': {
+        p.stealthed = false;
+        const total = this.damageOf(p, 'spell', sk.p);
+        target.effects.push({ t: 'dot', until: t + sk.dur * 1000, tick: Math.ceil(total / (sk.dur / 3)), nextTick: t + 3000, srcId: p.id, name: skillName });
+        this.eventTo(p, `${skillName} ronge ${target.name}.`);
+        break;
+      }
+      case 'aoe': {
+        p.stealthed = false;
+        const dmg = this.damageOf(p, 'spell', sk.p);
+        for (const e of this.entities.values()) {
+          if (!e.dead && this.isEnemy(p, e) && dist(e, target) < 15) this.dealDamage(p, e, dmg, skillName);
+        }
+        break;
+      }
+      case 'stun': {
+        const dmg = this.damageOf(p, 'melee', sk.p);
+        this.dealDamage(p, target, dmg, skillName);
+        if (!target.dead) target.effects.push({ t: 'stun', until: t + sk.dur * 1000 });
+        break;
+      }
+      case 'root': {
+        if (sk.p > 0) this.dealDamage(p, target, this.damageOf(p, 'spell', sk.p), skillName);
+        if (!target.dead) { target.effects.push({ t: 'root', until: t + sk.dur * 1000 }); this.eventTo(p, `${target.name} est immobilisé !`); }
+        break;
+      }
+      case 'mez': {
+        target.effects.push({ t: 'mez', until: t + sk.dur * 1000 });
+        this.eventTo(p, `${target.name} est hypnotisé... ne le frappez pas !`);
+        break;
+      }
+      case 'heal': {
+        const tgt = (target && !this.isEnemy(p, target) && !target.dead && dist(p, target) < 30) ? target : p;
+        const amt = Math.floor((20 + p.lvl * 6) * sk.p * (1 + classById(p.cls).stats.mag / 200));
+        tgt.hp = Math.min(tgt.maxHp, tgt.hp + amt);
+        this.eventTo(p, `${skillName} : +${amt} PV${tgt !== p ? ' → ' + tgt.name : ''}.`);
+        break;
+      }
+      case 'groupheal': {
+        const amt = Math.floor((16 + p.lvl * 5) * sk.p * (1 + classById(p.cls).stats.mag / 200));
+        for (const g of this.group(p)) { if (dist(g, p) < 35) g.hp = Math.min(g.maxHp, g.hp + amt); }
+        this.eventTo(p, `${skillName} : le groupe est soigné (+${amt} PV).`);
+        break;
+      }
+      case 'hot': {
+        const tgt = (target && !this.isEnemy(p, target) && !target.dead) ? target : p;
+        const amt = Math.floor((8 + p.lvl * 2.5) * sk.p);
+        tgt.effects.push({ t: 'hot', until: t + sk.dur * 1000, tick: amt, nextTick: t + 3000 });
+        this.eventTo(p, `${skillName} enveloppe ${tgt === p ? 'vous' : tgt.name}.`);
+        break;
+      }
+      case 'buff': {
+        p.effects.push({ t: 'buff', until: t + sk.dur * 1000, dmgBonus: sk.p });
+        this.eventTo(p, `${skillName} : puissance accrue !`);
+        break;
+      }
+      case 'stealth': {
+        p.stealthed = !p.stealthed;
+        p.autoAttack = false;
+        this.eventTo(p, p.stealthed ? 'Vous vous fondez dans les ombres...' : 'Vous sortez des ombres.');
+        break;
+      }
+    }
+    this.sendSelf(p);
+  }
+
+  damageOf(e, type, mult) {
+    const cls = e.cls ? classById(e.cls) : null;
+    const archDmg = cls ? ARCHETYPES[cls.arch].dmg : 1;
+    let stat = 50;
+    if (cls) stat = type === 'melee' ? cls.stats.str : type === 'ranged' ? cls.stats.dex : cls.stats.mag;
+    let dmg = (10 + e.lvl * 2.4) * mult * archDmg * (1 + stat / 250);
+    const buff = (e.effects || []).find((f) => f.t === 'buff' && f.until > now());
+    if (buff) dmg *= 1 + buff.dmgBonus;
+    return Math.floor(dmg * rand(0.85, 1.15));
+  }
+
+  isEnemy(a, b) {
+    if (a.id === b.id) return false;
+    if (b.kind === 'npc') return false;
+    if (b.kind === 'mob') return true;
+    if (a.kind === 'mob') return true;
+    return a.realm !== b.realm;
+  }
+
+  eventTo(e, text, cat = 'combat') {
+    if (e.session) this.send(e.session, MSG.EVENT, { text, cat });
+  }
+
+  dealDamage(src, tgt, dmg, label) {
+    if (tgt.dead) return;
+    tgt.hp -= dmg;
+    tgt.lastCombat = now();
+    src.lastCombat = now();
+    // le mez se brise
+    tgt.effects = (tgt.effects || []).filter((f) => f.t !== 'mez');
+    // aggro
+    if ((tgt.kind === 'mob' || tgt.kind === 'guard' || tgt.kind === 'ai') && !tgt.targetId) tgt.targetId = src.id;
+    this.eventTo(src, `${label || 'Attaque'} : ${dmg} dégâts → ${tgt.name}.`);
+    this.eventTo(tgt, `${src.name} vous inflige ${dmg} dégâts (${label || 'attaque'}).`);
+    if (tgt.hp <= 0) this.onDeath(src, tgt);
+  }
+
+  onDeath(killer, victim) {
+    victim.hp = 0; victim.dead = true; victim.targetId = null; victim.effects = [];
+    // crédit du tueur réel (compagnon -> propriétaire)
+    let credit = killer;
+    if (killer.kind === 'companion') credit = this.entities.get(killer.ownerId) || killer;
+
+    if (victim.kind === 'mob') {
+      victim.respawnAt = now() + 15000;
+      if (credit.kind === 'player') {
+        const diff = clamp(1 + (victim.lvl - credit.lvl) * 0.12, 0.2, 2.2);
+        this.gainXp(credit, Math.floor(28 * victim.lvl * diff));
+        const gold = irand(2, 6) * victim.lvl;
+        credit.gold += gold;
+        this.eventTo(credit, `Vous avez vaincu ${victim.name} (+${gold} or).`, 'loot');
+        this.questCredit(credit, victim.mobType);
+      }
+    } else if (victim.kind === 'ai' || victim.kind === 'player') {
+      if (victim.kind === 'ai') victim.respawnAt = now() + 20000;
+      if (credit.kind === 'player' && this.isEnemy(credit, victim)) {
+        this.gainXp(credit, 60 * victim.lvl);
+        this.eventTo(credit, `☠ Vous avez tué ${victim.name} de ${REALMS[victim.realm].name} ! (+points de royaume)`, 'rvr');
+        this.questCredit(credit, '__enemy');
+        this.broadcastEvent(`${credit.name} a tué ${victim.name} (${REALMS[victim.realm].name}) à la frontière !`, 'rvr', credit.realm);
+      }
+      if (victim.kind === 'player' && victim.session) {
+        this.send(victim.session, MSG.DEAD, {});
+        this.sendSelf(victim);
+      }
+    } else if (victim.kind === 'companion') {
+      this.entities.delete(victim.id);
+      const owner = this.entities.get(victim.ownerId);
+      if (owner) this.eventTo(owner, `${victim.name} est tombé au combat.`, 'group');
+      return;
+    } else if (victim.kind === 'guard') {
+      victim.respawnAt = now() + 45000;
+    }
+  }
+
+  questCredit(p, targetId) {
+    for (const q of QUESTS[p.realm]) {
+      const st = p.quests[q.id];
+      if (st && !st.done && q.target === targetId && st.progress < q.count) {
+        st.progress++;
+        this.eventTo(p, `Quête « ${q.name} » : ${st.progress}/${q.count}`, 'quest');
+      }
+    }
+    this.sendSelf(p);
+  }
+
+  gainXp(p, amount) {
+    if (p.kind !== 'player') return;
+    p.xp += amount;
+    this.eventTo(p, `+${amount} XP`, 'xp');
+    while (p.lvl < MAX_LEVEL && p.xp >= xpForLevel(p.lvl + 1)) {
+      p.lvl++;
+      const cls = classById(p.cls);
+      p.maxHp = maxHp(cls, p.lvl); p.hp = p.maxHp;
+      p.maxPower = maxPower(cls, p.lvl); p.power = p.maxPower;
+      this.eventTo(p, `★ NIVEAU ${p.lvl} ! Vous vous sentez plus puissant.`, 'levelup');
+      // nouvelle compétence débloquée à ce niveau ?
+      const skills = ARCHETYPES[cls.arch].skills;
+      const ni = skills.findIndex((s) => (s.lvl || 1) === p.lvl);
+      if (ni >= 0) this.eventTo(p, `📜 Nouvelle compétence apprise : ${skills[ni].name || cls.sk[ni]} !`, 'levelup');
+      this.persistPlayer(p);
+      // les compagnons suivent le niveau
+      for (const e of this.entities.values()) {
+        if (e.kind === 'companion' && e.ownerId === p.id) {
+          e.lvl = p.lvl;
+          const ccls = classById(e.cls);
+          e.maxHp = maxHp(ccls, e.lvl); e.hp = e.maxHp;
+          e.maxPower = maxPower(ccls, e.lvl); e.power = e.maxPower;
+        }
+      }
+    }
+    this.sendSelf(p);
+  }
+
+  // ============ BOUCLE DE JEU ============
+  start() {
+    this.tickTimer = setInterval(() => this.tick(), WORLD.tickMs);
+    this.bcastTimer = setInterval(() => this.broadcastState(), WORLD.broadcastMs);
+    this.saveTimer = setInterval(() => {
+      for (const s of this.sessions) if (s.player) this.persistPlayer(s.player);
+      this.flushSaves();
+    }, 10000);
+  }
+
+  tick() {
+    const t = now();
+    for (const e of this.entities.values()) {
+      // respawn
+      if (e.dead && e.respawnAt && t > e.respawnAt) {
+        e.dead = false; e.hp = e.maxHp; e.effects = []; e.targetId = null;
+        if (e.kind === 'mob' || e.kind === 'guard') { e.x = e.home.x; e.z = e.home.z; }
+        if (e.kind === 'ai') {
+          e.power = e.maxPower;
+          const base = REALMS[e.realm].base;
+          e.x = base.x * 0.35 + rand(-40, 40); e.z = base.z * 0.35 + rand(-40, 40);
+          e.aiState = 'patrol'; e.waypoint = null;
+        }
+        continue;
+      }
+      if (e.dead) continue;
+
+      // effets périodiques
+      if (e.effects && e.effects.length) {
+        e.effects = e.effects.filter((f) => f.until > t);
+        for (const f of e.effects) {
+          if ((f.t === 'dot' || f.t === 'hot') && t > (f.nextTick || 0)) {
+            f.nextTick = t + 3000;
+            if (f.t === 'dot') {
+              e.hp -= f.tick;
+              if (e.hp <= 0) { const src = this.entities.get(f.srcId); this.onDeath(src || e, e); }
+            } else {
+              e.hp = Math.min(e.maxHp, e.hp + f.tick);
+            }
+          }
+        }
+      }
+      if (e.dead) continue;
+
+      // régénération hors combat
+      if (t - (e.lastCombat || 0) > 6000 && (e.kind === 'player' || e.kind === 'ai' || e.kind === 'companion')) {
+        if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + Math.ceil(e.maxHp * 0.004));
+        if (e.power < e.maxPower) e.power = Math.min(e.maxPower, e.power + Math.ceil(e.maxPower * 0.006));
+      }
+
+      // IA
+      if (e.kind === 'mob') this.tickMob(e, t);
+      else if (e.kind === 'guard') this.tickGuard(e, t);
+      else if (e.kind === 'ai') this.tickAi(e, t);
+      else if (e.kind === 'companion') this.tickCompanion(e, t);
+      else if (e.kind === 'player') this.tickPlayerAuto(e, t);
+    }
+    this.tickFort(t);
+  }
+
+  // attaque automatique du joueur
+  tickPlayerAuto(p, t) {
+    if (!p.autoAttack || p.dead) return;
+    const tgt = this.entities.get(p.targetId);
+    if (!tgt || tgt.dead || !this.isEnemy(p, tgt)) { p.autoAttack = false; return; }
+    if (this.hasEffect(p, 'stun') || this.hasEffect(p, 'mez')) return;
+    const cls = classById(p.cls);
+    const melee = !['caster', 'archer'].includes(cls.arch);
+    const rng = melee ? 5 : 38;
+    if (dist(p, tgt) > rng) return;
+    if (t > (p.swingAt || 0)) {
+      p.swingAt = t + 2200;
+      const type = melee ? 'melee' : (cls.arch === 'archer' ? 'ranged' : 'spell');
+      this.dealDamage(p, tgt, this.damageOf(p, type, 0.9), melee ? 'Attaque' : 'Tir');
+    }
+  }
+
+  moveToward(e, tx, tz, speed, dt) {
+    if (this.hasEffect(e, 'root') || this.hasEffect(e, 'stun') || this.hasEffect(e, 'mez')) return;
+    const dx = tx - e.x, dz = tz - e.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.5) return;
+    const step = Math.min(d, speed * dt);
+    const c = this.applyCollisions(e, e.x + (dx / d) * step, e.z + (dz / d) * step);
+    e.x = c.x; e.z = c.z;
+    e.ry = Math.atan2(dx, dz);
+  }
+
+  // collisions : décor statique + autres entités proches
+  applyCollisions(e, x, z) {
+    const rad = entityRadius(e.kind);
+    let c = resolveMove(x, z, rad);
+    const others = [];
+    for (const o of this.entities.values()) {
+      if (o.id === e.id || o.dead) continue;
+      if (o.kind === 'companion' && o.ownerId === e.id) continue; // les compagnons ne bloquent pas leur chef
+      if (e.kind === 'companion' && e.ownerId === o.id) continue;
+      if (Math.abs(o.x - c.x) > 6 || Math.abs(o.z - c.z) > 6) continue;
+      others.push({ x: o.x, z: o.z, r: entityRadius(o.kind) });
+    }
+    if (others.length) c = pushApart(c.x, c.z, rad, others);
+    return resolveMove(c.x, c.z, rad);
+  }
+
+  tickMob(e, t) {
+    const dt = WORLD.tickMs / 1000;
+    const tgt = e.targetId ? this.entities.get(e.targetId) : null;
+    if (tgt && !tgt.dead && dist(e, tgt) < 70) {
+      if (dist(e, e.home) > 90) { e.targetId = null; return; } // laisse
+      if (dist(e, tgt) > 4) this.moveToward(e, tgt.x, tgt.z, 9, dt);
+      else if (t > (e.swingAt || 0)) {
+        e.swingAt = t + 2000;
+        this.dealDamage(e, tgt, Math.floor((6 + e.lvl * 2.4) * rand(0.85, 1.15)), 'Morsure');
+      }
+    } else {
+      e.targetId = null;
+      // cherche une cible proche (sauf furtifs)
+      for (const o of this.entities.values()) {
+        if ((o.kind === 'player' || o.kind === 'ai' || o.kind === 'companion') && !o.dead && !o.stealthed && dist(e, o) < 22) {
+          e.targetId = o.id; break;
+        }
+      }
+      if (!e.targetId && dist(e, e.home) > 2) this.moveToward(e, e.home.x, e.home.z, 7, dt);
+    }
+  }
+
+  tickGuard(e, t) {
+    const dt = WORLD.tickMs / 1000;
+    const tgt = e.targetId ? this.entities.get(e.targetId) : null;
+    if (tgt && !tgt.dead && dist(e, tgt) < 60) {
+      if (dist(e, tgt) > 4) this.moveToward(e, tgt.x, tgt.z, 12, dt);
+      else if (t > (e.swingAt || 0)) {
+        e.swingAt = t + 1800;
+        this.dealDamage(e, tgt, Math.floor(50 * rand(0.85, 1.15)), "Lame du garde");
+      }
+    } else {
+      e.targetId = null;
+      for (const o of this.entities.values()) {
+        if ((o.kind === 'player' || o.kind === 'ai') && !o.dead && !o.stealthed && o.realm && o.realm !== e.realm && dist(e, o) < 35) {
+          e.targetId = o.id; break;
+        }
+      }
+      if (!e.targetId && dist(e, e.home) > 2) this.moveToward(e, e.home.x, e.home.z, 10, dt);
+    }
+  }
+
+  tickAi(e, t) {
+    const dt = WORLD.tickMs / 1000;
+    // cible ennemie la plus proche
+    let best = null, bestD = 50;
+    for (const o of this.entities.values()) {
+      if (o.dead || o.stealthed) continue;
+      if ((o.kind === 'player' || o.kind === 'ai' || o.kind === 'companion' || o.kind === 'guard') && this.isEnemy(e, o)) {
+        const d = dist(e, o);
+        if (d < bestD) { best = o; bestD = d; }
+      }
+    }
+    if (best) {
+      e.targetId = best.id;
+      const cls = classById(e.cls);
+      const caster = ['caster', 'healer', 'support', 'archer'].includes(cls.arch);
+      const rng = caster ? 30 : 4.5;
+      if (bestD > rng) this.moveToward(e, best.x, best.z, 11, dt);
+      else if (t > (e.swingAt || 0)) {
+        e.swingAt = t + 2400;
+        const type = caster ? 'spell' : 'melee';
+        this.dealDamage(e, best, this.damageOf(e, type, 1.1), cls.sk[0]);
+        // les soigneurs IA se soignent
+        if (cls.arch === 'healer' && e.hp < e.maxHp * 0.5) {
+          e.hp = Math.min(e.maxHp, e.hp + Math.floor(e.maxHp * 0.25));
+        }
+      }
+    } else {
+      e.targetId = null;
+      // patrouille vers le fort puis autour
+      if (!e.waypoint || dist(e, e.waypoint) < 8) {
+        e.waypoint = Math.random() < 0.6
+          ? { x: rand(-1, 1) * (FRONTIER.fortRadius + 30), z: rand(-1, 1) * (FRONTIER.fortRadius + 30) } // vers le fort
+          : { x: e.home.x + rand(-100, 100), z: e.home.z + rand(-100, 100) };
+      }
+      this.moveToward(e, e.waypoint.x, e.waypoint.z, 8, dt);
+    }
+  }
+
+  tickCompanion(e, t) {
+    const dt = WORLD.tickMs / 1000;
+    const owner = this.entities.get(e.ownerId);
+    if (!owner || owner.dead) { if (!owner) this.entities.delete(e.id); return; }
+    const cls = classById(e.cls);
+    // soigneur : soigne le groupe
+    if (cls.arch === 'healer' && t > (e.swingAt || 0)) {
+      const wounded = this.group(owner).filter((g) => g.hp < g.maxHp * 0.75 && dist(e, g) < 30)
+        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (wounded) {
+        e.swingAt = t + 3000;
+        const amt = Math.floor(25 + e.lvl * 5);
+        wounded.hp = Math.min(wounded.maxHp, wounded.hp + amt);
+        this.eventTo(owner, `${e.name} soigne ${wounded === owner ? 'vous' : wounded.name} (+${amt} PV).`, 'group');
+        return;
+      }
+    }
+    // assiste le propriétaire
+    const tgt = owner.targetId ? this.entities.get(owner.targetId) : null;
+    if (tgt && !tgt.dead && this.isEnemy(e, tgt) && owner.autoAttack !== false && (owner.lastCombat || 0) > t - 8000) {
+      if (dist(e, tgt) > 4.5) this.moveToward(e, tgt.x, tgt.z, 12, dt);
+      else if (t > (e.swingAt || 0)) {
+        e.swingAt = t + 2200;
+        this.dealDamage(e, tgt, this.damageOf(e, 'melee', 0.9), cls.sk[0]);
+      }
+    } else if (dist(e, owner) > 6) {
+      this.moveToward(e, owner.x + rand(-3, 3), owner.z + rand(-3, 3), 14, dt);
+    }
+  }
+
+  tickFort(t) {
+    // capture : un joueur vivant dans l'enceinte du fort, aucun ennemi (joueur/IA) vivant à proximité
+    const CAP = FRONTIER.fortRadius - 24;   // anneau de capture autour du donjon
+    const CONTEST = FRONTIER.fortRadius + 6; // zone contestée (toute l'enceinte)
+    let capturer = null;
+    for (const e of this.entities.values()) {
+      if (e.kind === 'player' && !e.dead && dist(e, this.fort) < CAP) { capturer = e; break; }
+    }
+    if (!capturer || capturer.realm === this.fort.owner) { this.fort.progress = 0; this.fort.capturer = null; return; }
+    for (const e of this.entities.values()) {
+      if ((e.kind === 'ai' || e.kind === 'player') && !e.dead && e.realm !== capturer.realm && dist(e, this.fort) < CONTEST) {
+        this.fort.progress = 0; return; // contesté
+      }
+    }
+    if (this.fort.capturer !== capturer.realm) { this.fort.progress = 0; this.fort.capturer = capturer.realm; }
+    this.fort.progress += WORLD.tickMs / 1000;
+    if (this.fort.progress >= 10) {
+      this.fort.owner = capturer.realm;
+      this.fort.progress = 0;
+      this.gainXp(capturer, 2000);
+      this.broadcastEvent(`🏰 Le Fort Central est tombé ! ${REALMS[capturer.realm].name} contrôle désormais la frontière ! (${capturer.name})`, 'rvr');
+    }
+  }
+
+  // ============ DIFFUSION D'ÉTAT ============
+  broadcastState() {
+    for (const s of this.sessions) {
+      const p = s.player;
+      if (!p) continue;
+      const ents = [];
+      for (const e of this.entities.values()) {
+        if (e.id === p.id) continue;
+        if (e.dead && e.kind !== 'player') continue;
+        if (dist(e, p) > WORLD.viewRange) continue;
+        if (e.stealthed && e.realm !== p.realm) continue; // furtifs ennemis invisibles
+        ents.push([
+          e.id, e.kind, e.name, e.realm || '', e.cls || e.mobType || '', e.lvl,
+          Math.round(e.x * 10) / 10, Math.round(e.z * 10) / 10, Math.round((e.ry || 0) * 100) / 100,
+          Math.round((e.hp / e.maxHp) * 100), e.dead ? 1 : 0, e.kind === 'npc' ? e.role : '',
+        ]);
+      }
+      this.send(s, MSG.STATE, {
+        e: ents,
+        me: { hp: p.hp, maxHp: p.maxHp, power: p.power, maxPower: p.maxPower, lvl: p.lvl, xp: p.xp, xpNext: xpForLevel(p.lvl + 1), gold: p.gold, stealthed: p.stealthed },
+        fort: { owner: this.fort.owner, progress: this.fort.capturer === p.realm ? this.fort.progress : 0 },
+      });
+    }
+  }
+}
+
+// Générateur de noms d'IA par royaume
+const AI_NAMES = {
+  alb: ['Cedric', 'Rowena', 'Aldous', 'Mathilde', 'Gareth', 'Lionel', 'Ysolde', 'Bedwyr'],
+  hib: ['Niamh', 'Cathal', 'Aoife', 'Finnegan', 'Brigid', 'Deaglan', 'Saoirse', 'Ronan'],
+  mid: ['Sigrid', 'Bjorn', 'Astrid', 'Leif', 'Gunnar', 'Freydis', 'Halvar', 'Ingrid'],
+};
+const usedNames = new Set();
+function aiName(realm) {
+  let n = pick(AI_NAMES[realm]);
+  let i = 1;
+  while (usedNames.has(n)) n = pick(AI_NAMES[realm]) + ' ' + ['le Brave', 'la Rusée', 'le Vaillant', "l'Ancien"][i++ % 4];
+  usedNames.add(n);
+  return n;
+}
+// ===== Mode SOLO : serveur simulé localement, zéro réseau =====
+class Net {
+  constructor(game) {
+    this.handlers = {};
+    this.ready = Promise.resolve();
+    this.game = game;
+    this.session = game.addConnection({ readyState: 1 });
+  }
+  on(type, fn) { (this.handlers[type] ||= []).push(fn); }
+  send(type, data = {}) { queueMicrotask(() => this.game.handleMessage(this.session, { type, ...data })); }
+  deliver(type, data) { (this.handlers[type] || []).forEach((h) => h({ type, ...data })); }
+}
+// sauvegarde des personnages dans le navigateur (localStorage)
+const soloStorage = {
+  load() { try { return JSON.parse(localStorage.getItem('raw_saves') || '{}'); } catch { return {}; } },
+  save(d) { try { localStorage.setItem('raw_saves', JSON.stringify(d)); } catch {} },
+};
+const game = new Game(soloStorage);
+const net = new Net(game);
+game.send = (session, type, data) => net.deliver(type, data);
+game.start();
+addEventListener('beforeunload', () => {
+  for (const s of game.sessions) if (s.player) game.persistPlayer(s.player);
+  game.flushSaves();
+});
+// HUD : barres, journal, quêtes, dialogues PNJ, barre de compétences
+
+const $ = (id) => document.getElementById(id);
+
+class UI {
+  constructor(net) {
+    this.net = net;
+    this.self = null;
+    this.cls = null;
+    this.cooldowns = {};
+
+    $('btn-respawn').onclick = () => { net.send(MSG.RESPAWN); $('deathscreen').classList.add('hidden'); };
+    $('btn-pot-hp').onclick = () => net.send(MSG.USE_ITEM, { id: 'potion_hp' });
+    $('btn-pot-pw').onclick = () => net.send(MSG.USE_ITEM, { id: 'potion_pw' });
+    document.querySelectorAll('.gbtn[data-role]').forEach((b) => {
+      b.onclick = () => net.send(MSG.RECRUIT, { role: b.dataset.role });
+    });
+
+    // chat
+    this.chatOpen = false;
+    const input = $('chatinput');
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        const text = input.value.trim();
+        if (text) net.send(MSG.CHAT, { text });
+        input.value = ''; this.toggleChat(false);
+      } else if (e.key === 'Escape') { input.value = ''; this.toggleChat(false); }
+    });
+
+    setInterval(() => this.renderCooldowns(), 200);
+  }
+
+  toggleChat(open) {
+    this.chatOpen = open;
+    const input = $('chatinput');
+    input.classList.toggle('open', open);
+    if (open) input.focus(); else input.blur();
+  }
+
+  log(text, cat = 'info') {
+    const el = $('log');
+    const p = document.createElement('p');
+    p.className = 'c-' + cat;
+    p.textContent = text;
+    el.appendChild(p);
+    while (el.children.length > 60) el.removeChild(el.firstChild);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  setIdentity(self) {
+    this.cls = classById(self.cls);
+    this.lvl = self.lvl || 1;
+    $('selfname').textContent = `${self.name} — ${this.cls.name} (${REALMS[self.realm].name})`;
+    this.buildSkillbar();
+    this.updateQuestLog(self.quests || {});
+  }
+
+  setSelf(me) {
+    this.self = me;
+    if (me.lvl && me.lvl !== this.lvl) {
+      this.lvl = me.lvl;
+      if (this.cls) this.buildSkillbar(); // déblocage de compétences
+    }
+    $('hpfill').style.width = (me.hp / me.maxHp * 100) + '%';
+    $('hptext').textContent = `${Math.max(0, Math.floor(me.hp))} / ${me.maxHp}`;
+    $('pwfill').style.width = (me.power / me.maxPower * 100) + '%';
+    $('pwtext').textContent = `${Math.floor(me.power)} / ${me.maxPower}`;
+    const prev = 0; // xp du niveau courant simplifiée
+    $('xpfill').style.width = Math.min(100, me.xp / me.xpNext * 100) + '%';
+    $('xptext').textContent = `Niv. ${me.lvl}`;
+    $('goldtext').textContent = `💰 ${me.gold} or`;
+  }
+
+  setTarget(ent) {
+    const f = $('targetframe');
+    if (!ent) { f.classList.add('hidden'); return; }
+    f.classList.remove('hidden');
+    const realm = ent.realm ? ` — ${REALMS[ent.realm]?.name || ''}` : '';
+    $('targetname').textContent = `${ent.name} (niv. ${ent.lvl})${realm}`;
+    $('thpfill').style.width = ent.hpPct + '%';
+  }
+
+  setFort(owner, progress) {
+    $('fortowner').textContent = owner ? REALMS[owner].name : 'neutre';
+    $('fortowner').style.color = owner ? REALMS[owner].colorCss : '#aab2c8';
+    const wrap = $('capbarwrap');
+    if (progress > 0) {
+      wrap.classList.remove('hidden');
+      $('capfill').style.width = (progress / 10 * 100) + '%';
+    } else wrap.classList.add('hidden');
+  }
+
+  buildSkillbar() {
+    const bar = $('skillbar');
+    bar.innerHTML = '';
+    const arch = ARCHETYPES[this.cls.arch];
+    const lvl = this.lvl || 1;
+    arch.skills.forEach((sk, i) => {
+      const name = sk.name || this.cls.sk[i];
+      const locked = lvl < (sk.lvl || 1);
+      const d = document.createElement('div');
+      d.className = 'skill' + (locked ? ' locked' : '');
+      d.innerHTML = `<span class="key">${i + 1}</span><span class="nm">${name}</span>` +
+        (locked ? `<span class="lk">Niv. ${sk.lvl}</span>` : '');
+      d.title = locked ? `${name} — débloquée au niveau ${sk.lvl}` : `${name} — recharge ${sk.cd}s`;
+      d.onclick = () => { if (!locked) this.net.send(MSG.SKILL, { slot: i }); };
+      d.dataset.slot = i;
+      bar.appendChild(d);
+    });
+  }
+
+  setCooldowns(cds) { this.cooldowns = cds || {}; }
+
+  renderCooldowns() {
+    const t = Date.now();
+    document.querySelectorAll('.skill').forEach((d) => {
+      const until = this.cooldowns['s' + d.dataset.slot] || 0;
+      let ov = d.querySelector('.cdov');
+      if (until > t) {
+        if (!ov) { ov = document.createElement('div'); ov.className = 'cdov'; d.appendChild(ov); }
+        ov.textContent = Math.ceil((until - t) / 1000);
+      } else if (ov) ov.remove();
+    });
+  }
+
+  updateQuestLog(quests) {
+    this.questState = quests;
+    const el = $('questlist');
+    el.innerHTML = '';
+    const realm = this.cls?.realm;
+    if (!realm) return;
+    let any = false;
+    for (const q of QUESTS[realm]) {
+      const st = quests[q.id];
+      if (!st) continue;
+      any = true;
+      const d = document.createElement('div');
+      d.className = 'quest-entry';
+      d.innerHTML = `<div class="qn">${q.name}</div><div>${q.desc}</div>` +
+        (st.done ? `<div class="done">✓ Terminée</div>` : `<div>Progression : ${st.progress}/${q.count}</div>`);
+      el.appendChild(d);
+    }
+    if (!any) el.innerHTML = '<div style="color:#707890;font-size:12px">Aucune quête. Parlez à l\'émissaire de votre capitale (touche E).</div>';
+  }
+
+  showDialog(html, buttons) {
+    const d = $('dialog');
+    d.classList.remove('hidden');
+    d.innerHTML = html;
+    for (const b of buttons) {
+      const btn = document.createElement('button');
+      btn.className = 'dbtn' + (b.close ? ' close' : '');
+      btn.innerHTML = b.label;
+      btn.onclick = () => { if (b.fn) b.fn(); if (b.close || b.closeAfter) d.classList.add('hidden'); };
+      d.appendChild(btn);
+    }
+  }
+
+  showShop(shop) {
+    this.showDialog('<h3>Marchand</h3>', [
+      ...shop.map((i) => ({
+        label: `${i.name} — ${i.price} or`,
+        fn: () => this.net.send(MSG.BUY, { id: i.id }),
+      })),
+      { label: 'Fermer', close: true },
+    ]);
+  }
+
+  showQuests(quests) {
+    this.showDialog('<h3>Émissaire du royaume</h3>', [
+      ...quests.map((q) => {
+        let label, fn;
+        if (!q.state) { label = `Accepter : « ${q.name} » — ${q.desc}`; fn = () => this.net.send(MSG.QUEST_ACCEPT, { id: q.id }); }
+        else if (!q.state.done && q.state.progress >= q.count) { label = `✓ Rendre : « ${q.name} » (+${q.xp} XP, +${q.gold} or)`; fn = () => this.net.send(MSG.QUEST_TURNIN, { id: q.id }); }
+        else if (q.state.done) { label = `« ${q.name} » — déjà accomplie`; fn = null; }
+        else { label = `« ${q.name} » — en cours (${q.state.progress}/${q.count})`; fn = null; }
+        return { label, fn, closeAfter: !!fn };
+      }),
+      { label: 'Fermer', close: true },
+    ]);
+  }
+
+  death(show) { $('deathscreen').classList.toggle('hidden', !show); }
+  toggleQuestLog() { $('questlog').classList.toggle('hidden'); }
+}
+// Écran de création de personnage : royaume → classe → race → nom
+
+function charCreate(onDone) {
+  const $ = (id) => document.getElementById(id);
+  const state = { realm: null, cls: null, race: null };
+
+  const realmsEl = $('cc-realms'), classesEl = $('cc-classes'), racesEl = $('cc-races');
+  const detailEl = $('cc-detail'), goBtn = $('cc-go'), nameEl = $('cc-name');
+
+  function check() {
+    goBtn.disabled = !(state.realm && state.cls && state.race && nameEl.value.trim().length >= 2);
+  }
+  nameEl.addEventListener('input', check);
+
+  // --- royaumes ---
+  for (const r of Object.values(REALMS)) {
+    const d = document.createElement('div');
+    d.className = 'cc-card realm-card';
+    d.style.setProperty('--rc', r.colorCss);
+    d.innerHTML = `<div class="t">${r.name}</div><div class="s">${r.capital} — ${r.desc}</div>`;
+    d.onclick = () => {
+      state.realm = r.id; state.cls = null; state.race = null;
+      [...realmsEl.children].forEach((c) => c.classList.remove('sel'));
+      d.classList.add('sel');
+      renderClasses(); racesEl.innerHTML = ''; detailEl.innerHTML = ''; check();
+    };
+    realmsEl.appendChild(d);
+  }
+
+  function renderClasses() {
+    classesEl.innerHTML = '';
+    for (const c of classesOfRealm(state.realm)) {
+      const d = document.createElement('div');
+      d.className = 'cc-card';
+      d.innerHTML = `<div class="t">${c.name}</div><div class="s">${ARCHETYPES[c.arch].label}</div>`;
+      d.onclick = () => {
+        state.cls = c.id; state.race = null;
+        [...classesEl.children].forEach((x) => x.classList.remove('sel'));
+        d.classList.add('sel');
+        renderDetail(c); renderRaces(c); check();
+      };
+      classesEl.appendChild(d);
+    }
+  }
+
+  function renderDetail(c) {
+    const st = c.stats;
+    const mag = c.magStat ? ` · <b>${MAG_LABELS[c.magStat]}</b> ${st.mag}` : '';
+    detailEl.innerHTML =
+      `<b>${c.name}</b> — ${ARCHETYPES[c.arch].label} · Arme : ${c.weapon}<br/>` +
+      `Force ${st.str} · Constitution ${st.con} · Dextérité ${st.dex} · Vivacité ${st.qui}${mag}<br/>` +
+      `Compétences : ${c.sk.join(' · ')}`;
+  }
+
+  function renderRaces(c) {
+    racesEl.innerHTML = '';
+    for (const r of c.races) {
+      const d = document.createElement('div');
+      d.className = 'cc-card';
+      d.innerHTML = `<div class="t">${r}</div>`;
+      d.onclick = () => {
+        state.race = r;
+        [...racesEl.children].forEach((x) => x.classList.remove('sel'));
+        d.classList.add('sel'); check();
+      };
+      racesEl.appendChild(d);
+    }
+  }
+
+  goBtn.onclick = () => {
+    onDone({ realm: state.realm, cls: state.cls, race: state.race, name: nameEl.value.trim() });
+    document.getElementById('charcreate').classList.add('hidden');
+    document.getElementById('hud').classList.remove('hidden');
+  };
+}
+// ============================================================
+// Roster local (localStorage) + écran de sélection des personnages
+// Fonctionne à l'identique en multijoueur et en solo : le roster
+// liste les personnages créés sur ce navigateur ; sélectionner un
+// personnage envoie CREATE au serveur, qui restaure la sauvegarde
+// (même nom + royaume + classe).
+// ============================================================
+
+const ROSTER_KEY = 'raw_roster';
+const titleCase = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+const Roster = {
+  key(c) { return `${(c.name || '').toLowerCase()}|${c.realm}|${c.cls}`; },
+  list() {
+    try { return JSON.parse(localStorage.getItem(ROSTER_KEY) || '[]'); } catch { return []; }
+  },
+  _write(arr) {
+    try { localStorage.setItem(ROSTER_KEY, JSON.stringify(arr)); } catch {}
+  },
+  upsert(c) {
+    const arr = this.list();
+    const k = this.key(c);
+    const i = arr.findIndex((x) => this.key(x) === k);
+    const entry = { ...(i >= 0 ? arr[i] : {}), name: c.name, realm: c.realm, cls: c.cls, race: c.race, ts: Date.now() };
+    if (i >= 0) arr[i] = entry; else arr.push(entry);
+    this._write(arr);
+    return entry;
+  },
+  update(name, realm, cls, patch) {
+    const arr = this.list();
+    const k = `${(name || '').toLowerCase()}|${realm}|${cls}`;
+    const i = arr.findIndex((x) => this.key(x) === k);
+    if (i >= 0) { arr[i] = { ...arr[i], ...patch, ts: Date.now() }; this._write(arr); }
+  },
+  remove(c) {
+    const k = this.key(c);
+    this._write(this.list().filter((x) => this.key(x) !== k));
+  },
+  // Migration : si le roster est vide mais que des sauvegardes solo existent,
+  // on reconstruit le roster à partir de localStorage 'raw_saves'.
+  migrateFromSaves() {
+    if (this.list().length) return;
+    let saves;
+    try { saves = JSON.parse(localStorage.getItem('raw_saves') || '{}'); } catch { return; }
+    const arr = [];
+    for (const [key, sv] of Object.entries(saves)) {
+      const [name, realm, cls] = key.split('|');
+      const c = classById(cls);
+      if (!name || !REALMS[realm] || !c) continue;
+      arr.push({ name: titleCase(name), realm, cls, race: (c.races || [])[0], lvl: sv.lvl || 1, gold: sv.gold || 0, ts: sv.ts || Date.now() });
+    }
+    if (arr.length) this._write(arr);
+  },
+};
+
+// Affiche l'écran de sélection. Renvoie false si aucun personnage (l'appelant
+// bascule alors sur la création).
+function charSelect({ onPlay, onCreate }) {
+  Roster.migrateFromSaves();
+  const chars = Roster.list();
+  if (!chars.length) return false;
+
+  const screen = document.getElementById('charselect');
+  const listEl = document.getElementById('cs-list');
+  if (!screen || !listEl) return false;
+
+  function render() {
+    const list = Roster.list().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    if (!list.length) { screen.classList.add('hidden'); onCreate(); return; }
+    listEl.innerHTML = '';
+    for (const ch of list) {
+      const cls = classById(ch.cls);
+      const realm = REALMS[ch.realm];
+      if (!cls || !realm) continue;
+      const card = document.createElement('div');
+      card.className = 'cs-card';
+      card.style.setProperty('--rc', realm.colorCss);
+      card.innerHTML =
+        `<button class="cs-del" title="Supprimer ce personnage">✕</button>` +
+        `<div class="cs-name">${ch.name}</div>` +
+        `<div class="cs-line"><span class="cs-realm">${realm.name}</span> · ${cls.name}</div>` +
+        `<div class="cs-sub">${ARCHETYPES[cls.arch].label} · ${ch.race || cls.races[0]}</div>` +
+        `<div class="cs-stats">Niveau ${ch.lvl || 1}${ch.gold != null ? ` · ${ch.gold} or` : ''}</div>` +
+        `<div class="cs-play">▶ Jouer</div>`;
+      card.querySelector('.cs-del').onclick = (e) => {
+        e.stopPropagation();
+        if (confirm(`Supprimer ${ch.name} de cette liste ?`)) { Roster.remove(ch); render(); }
+      };
+      card.onclick = () => {
+        screen.classList.add('hidden');
+        onPlay({ name: ch.name, realm: ch.realm, cls: ch.cls, race: ch.race || cls.races[0] });
+      };
+      listEl.appendChild(card);
+    }
+  }
+
+  const newBtn = document.getElementById('cs-new');
+  if (newBtn) newBtn.onclick = () => { screen.classList.add('hidden'); onCreate(); };
+
+  render();
+  screen.classList.remove('hidden');
+  return true;
+}
+// ============================================================
+// REALMS AT WAR — client 3D low poly (Three.js)
+// Textures procédurales, animations, effets de sorts
+// ============================================================
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js';
+
+const ui = new UI(net);
+
+let selfId = null;
+let me = { x: 0, z: 0, ry: 0, dead: false, stealthed: false };
+let started = false;
+let myClsId = null;
+
+// ---------- Scène ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1320);
+scene.fog = new THREE.Fog(0x0e1320, 220, 520);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1200);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+scene.add(new THREE.AmbientLight(0x8090b0, 0.9));
+const sun = new THREE.DirectionalLight(0xfff2d0, 1.4);
+sun.position.set(120, 220, 80);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = 300;
+sun.shadow.camera.left = -sc; sun.shadow.camera.right = sc;
+sun.shadow.camera.top = sc; sun.shadow.camera.bottom = -sc;
+sun.shadow.camera.far = 700;
+scene.add(sun);
+
+const mat = (color, flat = true) => new THREE.MeshLambertMaterial({ color, flatShading: flat });
+
+// ---------- Textures procédurales (légères, générées au chargement) ----------
+function makeTex(size, repeat, draw) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  draw(cv.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeat, repeat);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const TEX = {
+  grass: makeTex(256, 80, (ctx, s) => {
+    ctx.fillStyle = '#39572f'; ctx.fillRect(0, 0, s, s);
+    for (let i = 0; i < 1600; i++) {
+      const g = 70 + Math.random() * 60 | 0;
+      ctx.fillStyle = `rgba(${g * 0.55 | 0},${g},${g * 0.45 | 0},${0.2 + Math.random() * 0.35})`;
+      ctx.fillRect(Math.random() * s, Math.random() * s, 1 + Math.random() * 2, 2 + Math.random() * 4);
+    }
+    for (let i = 0; i < 60; i++) { // touffes claires
+      ctx.fillStyle = 'rgba(120,150,70,0.25)';
+      ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 3 + Math.random() * 7, 0, 7); ctx.fill();
+    }
+  }),
+  stone: makeTex(256, 1, (ctx, s) => {
+    ctx.fillStyle = '#83879a'; ctx.fillRect(0, 0, s, s);
+    const bh = 32, bw = 64;
+    for (let y = 0; y < s; y += bh) {
+      const off = (y / bh) % 2 ? bw / 2 : 0;
+      for (let x = -bw; x < s; x += bw) {
+        const v = 115 + Math.random() * 50 | 0;
+        ctx.fillStyle = `rgb(${v},${v + 4},${v + 16})`;
+        ctx.fillRect(x + off + 2, y + 2, bw - 4, bh - 4);
+        for (let i = 0; i < 14; i++) {
+          ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`;
+          ctx.fillRect(x + off + Math.random() * bw, y + Math.random() * bh, 3, 2);
+        }
+      }
+    }
+  }),
+  wood: makeTex(128, 1, (ctx, s) => {
+    ctx.fillStyle = '#8a6a44'; ctx.fillRect(0, 0, s, s);
+    for (let x = 0; x < s; x += 32) {
+      const v = 110 + Math.random() * 50 | 0;
+      ctx.fillStyle = `rgb(${v},${v * 0.74 | 0},${v * 0.46 | 0})`;
+      ctx.fillRect(x + 1, 0, 30, s);
+      ctx.strokeStyle = 'rgba(40,25,10,0.5)'; ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, -2, 30, s + 4);
+      for (let i = 0; i < 7; i++) { // veines
+        ctx.strokeStyle = `rgba(60,40,20,${0.15 + Math.random() * 0.2})`; ctx.lineWidth = 1;
+        ctx.beginPath();
+        const gx = x + 4 + Math.random() * 24;
+        ctx.moveTo(gx, 0); ctx.bezierCurveTo(gx + 5, s * .3, gx - 5, s * .6, gx, s);
+        ctx.stroke();
+      }
+    }
+  }),
+  dirt: makeTex(256, 30, (ctx, s) => {
+    ctx.fillStyle = '#6e5a40'; ctx.fillRect(0, 0, s, s);
+    for (let i = 0; i < 900; i++) {
+      const v = 80 + Math.random() * 60 | 0;
+      ctx.fillStyle = `rgba(${v},${v * 0.8 | 0},${v * 0.55 | 0},${0.25 + Math.random() * 0.3})`;
+      ctx.beginPath(); ctx.arc(Math.random() * s, Math.random() * s, 1 + Math.random() * 3, 0, 7); ctx.fill();
+    }
+  }),
+};
+
+const texMat = (tex, color = 0xffffff) => new THREE.MeshLambertMaterial({ map: tex, color });
+const stoneMat = () => texMat(TEX.stone);
+const woodMat = () => texMat(TEX.wood);
+
+// ---------- Monde low poly ----------
+function buildWorld() {
+  const half = WORLD.size / 2;
+  const groundGeo = new THREE.PlaneGeometry(WORLD.size, WORLD.size, 48, 48);
+  groundGeo.rotateX(-Math.PI / 2);
+  const pos = groundGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let h = Math.sin(x * 0.013) * Math.cos(z * 0.011) * 6 + Math.sin(x * 0.031 + z * 0.027) * 2.5;
+    const flatten = Math.min(
+      Math.hypot(x, z),
+      ...Object.values(REALMS).map((r) => Math.hypot(x - r.base.x, z - r.base.z))
+    );
+    h *= THREE.MathUtils.clamp((flatten - 40) / 120, 0, 1);
+    pos.setY(i, h);
+  }
+  groundGeo.computeVertexNormals();
+  const ground = new THREE.Mesh(groundGeo, texMat(TEX.grass));
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // grande zone frontalière centrale : sol distinct, neutre
+  const frontier = new THREE.Mesh(new THREE.CircleGeometry(FRONTIER.radius, 48), new THREE.MeshBasicMaterial({
+    color: 0x6b6450, transparent: true, opacity: 0.16, depthWrite: false,
+  }));
+  frontier.rotation.x = -Math.PI / 2; frontier.position.y = 0.08;
+  scene.add(frontier);
+
+  // routes reliant chaque capitale au Fort Central
+  const roadMat = texMat(TEX.dirt.clone(), 0xb3a589); roadMat.map.repeat.set(2, 24); roadMat.map.needsUpdate = true;
+  for (const r of Object.values(REALMS)) {
+    const len = Math.hypot(r.base.x, r.base.z) - FRONTIER.fortRadius;
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(26, len), roadMat);
+    road.rotation.x = -Math.PI / 2;
+    road.rotation.z = -Math.atan2(r.base.x, r.base.z);
+    road.position.set(r.base.x * 0.5, 0.12, r.base.z * 0.5);
+    road.receiveShadow = true;
+    scene.add(road);
+  }
+
+  // esplanade de terre battue au pied du Fort Central
+  const plaza = new THREE.Mesh(new THREE.CircleGeometry(FRONTIER.fortRadius + 34, 32), texMat(TEX.dirt, 0xcccccc));
+  plaza.material.map = TEX.dirt.clone(); plaza.material.map.repeat.set(10, 10); plaza.material.map.needsUpdate = true;
+  plaza.rotation.x = -Math.PI / 2; plaza.position.y = 0.15;
+  scene.add(plaza);
+
+  // teintes de territoire autour de chaque capitale
+  for (const r of Object.values(REALMS)) {
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(440, 24), new THREE.MeshBasicMaterial({
+      color: r.color, transparent: true, opacity: 0.08, depthWrite: false,
+    }));
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.set(r.base.x * 0.78, 0.25, r.base.z * 0.78);
+    scene.add(disc);
+  }
+
+  // arbres / rochers — positions partagées avec le serveur (collisions)
+  const treeGeo = new THREE.ConeGeometry(3.4, 10, 6);
+  const trunkGeo = new THREE.CylinderGeometry(0.7, 0.9, 3.5, 5);
+  const rockGeo = new THREE.DodecahedronGeometry(2.2, 0);
+  for (const s of SCENERY) {
+    if (s.type === 'tree') {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(trunkGeo, woodMat());
+      trunk.position.y = 1.7;
+      const top = new THREE.Mesh(treeGeo, mat(s.z < -520 ? 0x4a6f6f : 0x2f6b33));
+      top.position.y = 8; top.castShadow = true;
+      g.add(trunk, top);
+      g.position.set(s.x, 0, s.z);
+      g.rotation.y = s.rot;
+      scene.add(g);
+    } else {
+      const rock = new THREE.Mesh(rockGeo, stoneMat());
+      rock.position.set(s.x, 1.2, s.z);
+      rock.rotation.set(s.rot, s.rot * 1.7, s.rot * 0.6);
+      rock.castShadow = true;
+      scene.add(rock);
+    }
+  }
+
+  for (const r of Object.values(REALMS)) buildCapital(r);
+  buildFort();
+
+  const mGeo = new THREE.ConeGeometry(60, 130, 5);
+  for (let a = 0; a < Math.PI * 2; a += 0.22) {
+    const m = new THREE.Mesh(mGeo, mat(0x39415a));
+    m.position.set(Math.cos(a) * (half + 30), 20, Math.sin(a) * (half + 30));
+    m.rotation.y = a;
+    scene.add(m);
+  }
+}
+
+function buildCapital(r) {
+  const g = new THREE.Group();
+  const c = r.color;
+  const wallMat = stoneMat();
+  const mkWall = (w, d, x, z, ry = 0) => {
+    const wll = new THREE.Mesh(new THREE.BoxGeometry(w, 14, d), wallMat);
+    wll.position.set(x, 7, z); wll.rotation.y = ry; wll.castShadow = true;
+    g.add(wll);
+  };
+  mkWall(110, 4, 0, 42);
+  mkWall(4, 88, -55, 0);
+  mkWall(4, 88, 55, 0);
+  const towerGeo = new THREE.CylinderGeometry(6, 7, 24, 6);
+  const roofGeo = new THREE.ConeGeometry(8, 9, 6);
+  for (const [tx, tz] of [[-55, 42], [55, 42], [-55, -42], [55, -42]]) {
+    const tw = new THREE.Mesh(towerGeo, wallMat);
+    tw.position.set(tx, 12, tz); tw.castShadow = true;
+    const rf = new THREE.Mesh(roofGeo, mat(c));
+    rf.position.set(tx, 28, tz);
+    g.add(tw, rf);
+  }
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(22, 30, 22), wallMat);
+  keep.position.set(0, 15, 20); keep.castShadow = true;
+  const keepRoof = new THREE.Mesh(new THREE.ConeGeometry(17, 14, 4), mat(c));
+  keepRoof.position.set(0, 37, 20); keepRoof.rotation.y = Math.PI / 4;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 16, 4), mat(0x444444));
+  pole.position.set(0, 50, 20);
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(8, 5, 0.3), mat(c));
+  flag.position.set(4.2, 54, 20);
+  g.add(keep, keepRoof, pole, flag);
+  for (let i = 0; i < 6; i++) {
+    const hx = -40 + (i % 3) * 32 + 6, hz = -20 + Math.floor(i / 3) * 38;
+    const house = new THREE.Mesh(new THREE.BoxGeometry(12, 8, 10), woodMat());
+    house.position.set(hx, 4, hz); house.castShadow = true;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(9.5, 6, 4), mat(0x7a4a36));
+    roof.position.set(hx, 11, hz); roof.rotation.y = Math.PI / 4;
+    g.add(house, roof);
+  }
+  g.position.set(r.base.x, 0, r.base.z);
+  g.rotation.y = Math.atan2(-r.base.x, -r.base.z) + Math.PI;
+  scene.add(g);
+}
+
+let fortFlagMat;
+function buildFort() {
+  const g = new THREE.Group();
+  const stone = stoneMat();
+  const FR = FRONTIER.fortRadius;
+  const panHalf = FR * 0.62;
+  // 4 pans de muraille crénelée (ouvertures = 4 portes franchissables)
+  for (let a = 1; a < 8; a += 2) {
+    const ang = (a / 8) * Math.PI * 2;
+    const cx = Math.cos(ang) * FR, cz = Math.sin(ang) * FR;
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(panHalf * 2, 16, 5), stone);
+    wall.position.set(cx, 8, cz);
+    wall.rotation.y = -ang + Math.PI / 2;
+    wall.castShadow = true; wall.receiveShadow = true;
+    g.add(wall);
+    // créneaux (répartis le long du pan, direction tangente (-sin,cos))
+    for (let k = -2; k <= 2; k++) {
+      const cren = new THREE.Mesh(new THREE.BoxGeometry(6, 4, 5.4), stone);
+      const off = k * (panHalf / 2.5);
+      cren.position.set(cx - Math.sin(ang) * off, 17, cz + Math.cos(ang) * off);
+      cren.rotation.y = -ang + Math.PI / 2;
+      g.add(cren);
+    }
+  }
+  // 4 tours d'angle à toit conique
+  for (let a = 0; a < 4; a++) {
+    const ang = (a / 4) * Math.PI * 2 + Math.PI / 4;
+    const tx = Math.cos(ang) * FR, tz = Math.sin(ang) * FR;
+    const tw = new THREE.Mesh(new THREE.CylinderGeometry(7, 8, 30, 8), stone);
+    tw.position.set(tx, 15, tz); tw.castShadow = true;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(9, 11, 8), mat(0x555a66));
+    roof.position.set(tx, 35, tz);
+    g.add(tw, roof);
+  }
+  // donjon central
+  const keep = new THREE.Mesh(new THREE.CylinderGeometry(15, 18, 34, 8), stone);
+  keep.position.y = 17; keep.castShadow = true;
+  const keepTop = new THREE.Mesh(new THREE.CylinderGeometry(17, 15, 5, 8), stone);
+  keepTop.position.y = 36;
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 26, 4), mat(0x333333));
+  pole.position.y = 50;
+  fortFlagMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa, flatShading: true });
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(12, 7, 0.5), fortFlagMat);
+  flag.position.set(6.5, 57, 0);
+  g.add(keep, keepTop, pole, flag);
+  scene.add(g);
+}
+
+// ---------- Effets visuels (sorts, impacts, soins) ----------
+const fxList = [];
+function addFx(obj, life, update) { scene.add(obj); fxList.push({ obj, life, max: life, update }); }
+const fxMat = (color, opacity = 1) => new THREE.MeshBasicMaterial({
+  color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false,
+});
+
+function spawnBurst(pos, color, n = 14, size = 0.4) {
+  const g = new THREE.Group();
+  g.position.copy(pos);
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Mesh(new THREE.TetrahedronGeometry(size * (0.6 + Math.random() * 0.8)), fxMat(color));
+    const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI - Math.PI / 2;
+    const sp = 8 + Math.random() * 10;
+    parts.push({ m, vx: Math.cos(a) * Math.cos(e) * sp, vy: Math.sin(e) * sp + 6, vz: Math.sin(a) * Math.cos(e) * sp });
+    g.add(m);
+  }
+  addFx(g, 0.6, (f, dt) => {
+    for (const p of parts) {
+      p.vy -= 25 * dt;
+      p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
+      p.m.rotation.x += dt * 8; p.m.rotation.y += dt * 6;
+      p.m.material.opacity = f.life / f.max;
+    }
+  });
+}
+
+function spawnProjectile(from, getTarget, color, speed = 50, size = 0.5) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(size, 6, 5), fxMat(color));
+  const trail = new THREE.Mesh(new THREE.SphereGeometry(size * 0.6, 5, 4), fxMat(color, 0.5));
+  const g = new THREE.Group(); g.add(m, trail);
+  g.position.set(from.x, 3.2, from.z);
+  const start = g.position.clone();
+  let t = 0;
+  addFx(g, 3, (f, dt) => {
+    const tp = getTarget();
+    if (!tp) { f.life = 0; return; }
+    const end = new THREE.Vector3(tp.x, 3.0, tp.z);
+    const d = Math.max(start.distanceTo(end), 1);
+    t += (speed * dt) / d;
+    if (t >= 1) { spawnBurst(end, color, 12, 0.35); f.life = 0; return; }
+    g.position.lerpVectors(start, end, t);
+    g.position.y += Math.sin(t * Math.PI) * 3; // arc
+    trail.position.copy(m.position).x -= 0.3;
+    m.rotation.y += dt * 10;
+  });
+}
+
+function spawnSparkles(getPos, color = 0x66ff88, dur = 1.1) {
+  const g = new THREE.Group();
+  const parts = [];
+  for (let i = 0; i < 12; i++) {
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.18), fxMat(color));
+    const a = Math.random() * Math.PI * 2;
+    m.position.set(Math.cos(a) * (0.6 + Math.random()), Math.random() * 1.5, Math.sin(a) * (0.6 + Math.random()));
+    parts.push({ m, vy: 1.5 + Math.random() * 2 });
+    g.add(m);
+  }
+  addFx(g, dur, (f, dt) => {
+    const p = getPos();
+    if (p) g.position.set(p.x, 1, p.z);
+    for (const s of parts) {
+      s.m.position.y += s.vy * dt;
+      s.m.rotation.y += dt * 6;
+      s.m.material.opacity = f.life / f.max;
+    }
+  });
+}
+
+function spawnRing(pos, color, maxR = 5) {
+  const m = new THREE.Mesh(new THREE.TorusGeometry(1, 0.18, 6, 24), fxMat(color));
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(pos.x, 0.5, pos.z);
+  addFx(m, 0.7, (f, dt) => {
+    const k = 1 - f.life / f.max;
+    m.scale.setScalar(1 + k * maxR);
+    m.material.opacity = 1 - k;
+  });
+}
+
+// position d'une entité (suivie en continu pour les projectiles)
+const entPos = (id) => () => {
+  if (id === selfId) return { x: me.x, z: me.z };
+  const e = entities.get(id);
+  return e ? e.mesh.position : null;
+};
+
+// déclenche l'animation + les effets quand on lance une compétence
+function castFx(slot) {
+  const cls = classById(myClsId);
+  if (!cls || !myMesh) return;
+  const sk = ARCHETYPES[cls.arch].skills[slot];
+  const tgt = targetId ? entities.get(targetId) : null;
+  const selfPos = { x: me.x, z: me.z };
+  const realmColor = REALMS[cls.realm].color;
+  switch (sk.t) {
+    case 'melee': case 'stun':
+      startSwing(myMesh);
+      if (tgt) setTimeout(() => spawnBurst(new THREE.Vector3(tgt.mesh.position.x, 2.5, tgt.mesh.position.z), sk.t === 'stun' ? 0xffe45c : 0xffbb88, 10, 0.3), 130);
+      break;
+    case 'ranged':
+      startSwing(myMesh);
+      if (tgt) spawnProjectile(selfPos, entPos(targetId), 0xfff0c0, 80, 0.25);
+      break;
+    case 'spell':
+      if (tgt) spawnProjectile(selfPos, entPos(targetId), realmColor, 55, 0.5);
+      break;
+    case 'dot':
+      if (tgt) spawnProjectile(selfPos, entPos(targetId), 0x88ff55, 45, 0.4);
+      break;
+    case 'aoe':
+      if (tgt) {
+        spawnProjectile(selfPos, entPos(targetId), realmColor, 55, 0.6);
+        setTimeout(() => { const p = entPos(targetId)(); if (p) spawnRing(p, realmColor, 9); }, 500);
+      }
+      break;
+    case 'heal':
+      spawnSparkles(tgt && tgt.data.realm === cls.realm ? entPos(targetId) : entPos(selfId), 0x66ff88);
+      break;
+    case 'groupheal':
+      spawnSparkles(entPos(selfId), 0x66ff88);
+      spawnRing(selfPos, 0x66ff88, 7);
+      break;
+    case 'hot':
+      spawnSparkles(tgt && tgt.data.realm === cls.realm ? entPos(targetId) : entPos(selfId), 0x99ffbb, 1.6);
+      break;
+    case 'buff':
+      spawnRing(selfPos, 0xf0d889, 4);
+      spawnSparkles(entPos(selfId), 0xf0d889, 0.8);
+      break;
+    case 'root':
+      if (tgt) spawnRing(tgt.mesh.position, 0x77aa44, 3);
+      break;
+    case 'mez':
+      if (tgt) spawnSparkles(entPos(targetId), 0xcc88ff, 1.4);
+      break;
+    case 'stealth':
+      spawnBurst(new THREE.Vector3(me.x, 2, me.z), 0x8899aa, 16, 0.3);
+      break;
+  }
+}
+
+// les effets s'ajoutent aux envois réseau, sans toucher à la logique
+const _origSend = net.send.bind(net);
+net.send = (type, data = {}) => {
+  if (started && type === MSG.SKILL) castFx(data.slot);
+  if (started && type === MSG.ATTACK && data.on && myMesh) startSwing(myMesh);
+  _origSend(type, data);
+};
+
+// ---------- Entités ----------
+const entities = new Map();
+const labelCache = new Map();
+
+function makeLabel(text, color, hpPct) {
+  const key = `${text}|${color}|${Math.round(hpPct / 5) * 5}`;
+  if (labelCache.has(key)) return labelCache.get(key).clone();
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  const w = Math.min(250, ctx.measureText(text).width + 16);
+  ctx.fillRect(128 - w / 2, 4, w, 30);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 128, 27);
+  ctx.fillStyle = '#222';
+  ctx.fillRect(78, 40, 100, 9);
+  ctx.fillStyle = hpPct > 50 ? '#4caf50' : hpPct > 25 ? '#ff9800' : '#f44336';
+  ctx.fillRect(79, 41, 98 * Math.max(0, hpPct) / 100, 7);
+  const tex = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  sp.scale.set(13, 3.2, 1);
+  labelCache.set(key, sp);
+  return sp.clone();
+}
+
+const KIND_COLORS = { mob: 0x8a6a4a, npc: 0xd8c060 };
+
+// géométrie de membre avec pivot en haut (pour un balancement naturel)
+function limb(w, h, d, color) {
+  const geo = new THREE.BoxGeometry(w, h, d);
+  geo.translate(0, -h / 2, 0);
+  return new THREE.Mesh(geo, mat(color));
+}
+
+function makeBody(kind, realm, cls) {
+  const g = new THREE.Group();
+  let color = realm ? REALMS[realm].color : (KIND_COLORS[kind] || 0x999999);
+  let scale = 1;
+  if (kind === 'mob') scale = 1.1;
+  if (kind === 'guard') scale = 1.15;
+  const anim = { phase: Math.random() * 6, swing: 0, arms: [], legs: [], weapon: null, body: null, bodyY: 0, prev: null };
+
+  if (kind === 'mob') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.6, 3.6), mat(color));
+    body.position.y = 1.3; body.castShadow = true;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 1.4), mat(color));
+    head.position.set(0, 2.1, 2.1);
+    g.add(body, head);
+    anim.body = body; anim.bodyY = 1.3;
+    for (const [lx, lz] of [[-0.9, 1.2], [0.9, 1.2], [-0.9, -1.2], [0.9, -1.2]]) {
+      const leg = limb(0.5, 1.2, 0.5, 0x5a4630);
+      leg.position.set(lx, 1.2, lz);
+      anim.legs.push(leg);
+      g.add(leg);
+    }
+  } else {
+    const arch = cls ? classById(cls)?.arch : null;
+    const robe = ['caster', 'healer', 'support'].includes(arch);
+    const body = new THREE.Mesh(
+      robe ? new THREE.ConeGeometry(1.2, 2.6, 6) : new THREE.BoxGeometry(1.6, 2.2, 0.9),
+      mat(color)
+    );
+    body.position.y = robe ? 1.3 : 1.9; body.castShadow = true;
+    anim.body = body; anim.bodyY = body.position.y;
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62, 0), mat(0xd9b48f));
+    head.position.y = 3.4;
+    g.add(body, head);
+    if (!robe) {
+      for (const s of [-1, 1]) {
+        const arm = limb(0.45, 1.8, 0.45, color);
+        arm.position.set(s * 1.1, 2.8, 0);
+        const leg = limb(0.55, 1.4, 0.55, 0x33363f);
+        leg.position.set(s * 0.45, 1.4, 0);
+        anim.arms.push(arm); anim.legs.push(leg);
+        g.add(arm, leg);
+        }
+    }
+    const wgeo = robe ? new THREE.CylinderGeometry(0.12, 0.12, 3.4, 5) : new THREE.BoxGeometry(0.22, 2.0, 0.22);
+    if (!robe) wgeo.translate(0, 0.8, 0); // pivot vers la garde de l'arme
+    const weapon = new THREE.Mesh(wgeo, mat(robe ? 0x8a6a3a : 0xc8ccd8));
+    weapon.position.set(1.35, robe ? 2.0 : 1.6, 0.2);
+    anim.weapon = weapon;
+    g.add(weapon);
+    if (kind === 'npc') {
+      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 6, 12), mat(0xf0d889));
+      halo.rotation.x = Math.PI / 2; halo.position.y = 4.3;
+      g.add(halo);
+    }
+  }
+  g.scale.setScalar(scale);
+  g.userData.anim = anim;
+  return g;
+}
+
+function startSwing(group) {
+  const a = group.userData.anim;
+  if (a) a.swing = 0.35;
+}
+
+// animation procédurale : marche, repos, coup d'arme
+function animateBody(group, speed, dt, elapsed) {
+  const a = group.userData.anim;
+  if (!a) return;
+  const moving = speed > 1.2;
+  if (moving) a.phase += dt * Math.min(speed, 22) * 0.55;
+  const sw = moving ? Math.sin(a.phase * 2.2) * 0.65 : 0;
+  if (a.legs.length === 4) { // quadrupède
+    a.legs[0].rotation.x = sw; a.legs[3].rotation.x = sw;
+    a.legs[1].rotation.x = -sw; a.legs[2].rotation.x = -sw;
+  } else if (a.legs.length === 2) {
+    a.legs[0].rotation.x = sw; a.legs[1].rotation.x = -sw;
+    if (a.arms[0]) { a.arms[0].rotation.x = -sw * 0.8; }
+    if (a.arms[1]) { a.arms[1].rotation.x = sw * 0.8; }
+  }
+  if (a.body) {
+    a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(a.phase * 2.2)) * 0.14 : Math.sin(elapsed * 1.6 + a.phase) * 0.05);
+  }
+  if (a.weapon) {
+    if (a.swing > 0) {
+      a.swing -= dt;
+      const k = 1 - Math.max(a.swing, 0) / 0.35;
+      a.weapon.rotation.x = -Math.sin(k * Math.PI) * 1.7;
+    } else {
+      a.weapon.rotation.x = moving ? sw * 0.3 : Math.sin(elapsed * 1.6 + a.phase) * 0.06;
+    }
+  }
+}
+
+function labelColor(kind, realm, myRealm) {
+  if (kind === 'npc') return '#f0d889';
+  if (kind === 'mob') return '#e0b070';
+  if (!realm) return '#ffffff';
+  if (realm === myRealm) return '#8fd4ff';
+  return '#ff6b5b';
+}
+
+function syncEntities(list, myRealm) {
+  const seen = new Set();
+  for (const a of list) {
+    const [id, kind, name, realm, cls, lvl, x, z, ry, hpPct, dead, role] = a;
+    seen.add(id);
+    let e = entities.get(id);
+    if (!e) {
+      const mesh = makeBody(kind, realm || null, cls);
+      scene.add(mesh);
+      e = { mesh, data: {}, label: null, labelKey: '' };
+      entities.set(id, e);
+      mesh.position.set(x, 0, z);
+    }
+    // impact visuel quand l'entité perd de la vie
+    if (e.data.hpPct !== undefined && hpPct < e.data.hpPct - 1 && !dead) {
+      spawnBurst(new THREE.Vector3(e.mesh.position.x, 2.5, e.mesh.position.z), 0xff5544, 6, 0.22);
+      startSwing(e.mesh);
+    }
+    if (!e.data.dead && dead) spawnBurst(new THREE.Vector3(e.mesh.position.x, 1.5, e.mesh.position.z), 0x888888, 16, 0.35);
+    e.data = { id, kind, name, realm, cls, lvl, hpPct, dead, role };
+    e.tx = x; e.tz = z; e.try = ry;
+    const lk = `${name} [${lvl}]|${hpPct}`;
+    if (e.labelKey !== lk) {
+      if (e.label) e.mesh.remove(e.label);
+      e.label = makeLabel(`${name} [${lvl}]`, labelColor(kind, realm, myRealm), hpPct);
+      e.label.position.y = kind === 'mob' ? 4.5 : 5.6;
+      e.mesh.add(e.label);
+      e.labelKey = lk;
+    }
+    e.mesh.visible = !dead;
+  }
+  for (const [id, e] of entities) {
+    if (!seen.has(id)) { scene.remove(e.mesh); entities.delete(id); }
+  }
+}
+
+// ---------- Joueur local ----------
+let myMesh = null;
+function initSelf(create) {
+  myMesh = makeBody('player', create.realm, create.cls);
+  scene.add(myMesh);
+  const base = REALMS[create.realm].base;
+  me.x = base.x; me.z = base.z;
+  myMesh.position.set(me.x, 0, me.z);
+}
+
+// ---------- Caméra & contrôles ----------
+let camYaw = 0, camPitch = 0.45, camDist = 26;
+let dragging = false, lastMx = 0, lastMy = 0;
+const keys = {};
+
+addEventListener('keydown', (e) => {
+  if (ui.chatOpen) return;
+  if (e.code === 'Enter') { ui.toggleChat(true); e.preventDefault(); return; }
+  keys[e.code] = true;
+  if (e.code.startsWith('Digit')) {
+    const n = parseInt(e.code.slice(5), 10);
+    if (n >= 1 && n <= 6) net.send(MSG.SKILL, { slot: n - 1 });
+  }
+  if (e.code === 'KeyR') net.send(MSG.ATTACK, { on: true });
+  if (e.code === 'KeyT') net.send(MSG.USE_ITEM, { id: 'potion_hp' });
+  if (e.code === 'KeyY') net.send(MSG.USE_ITEM, { id: 'potion_pw' });
+  if (e.code === 'KeyJ') ui.toggleQuestLog();
+  if (e.code === 'KeyF') targetNearest();
+  if (e.code === 'KeyE') interactNearest();
+  if (e.code === 'Escape') { setTarget(null); document.getElementById('dialog').classList.add('hidden'); }
+});
+addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+renderer.domElement.addEventListener('mousedown', (e) => {
+  dragging = true; lastMx = e.clientX; lastMy = e.clientY;
+});
+addEventListener('mouseup', () => { dragging = false; });
+addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  camYaw -= (e.clientX - lastMx) * 0.005;
+  camPitch = THREE.MathUtils.clamp(camPitch + (e.clientY - lastMy) * 0.004, 0.12, 1.25);
+  lastMx = e.clientX; lastMy = e.clientY;
+});
+addEventListener('wheel', (e) => {
+  camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.03, 10, 70);
+});
+
+const raycaster = new THREE.Raycaster();
+let dragMoved = false;
+renderer.domElement.addEventListener('mousedown', () => { dragMoved = false; });
+addEventListener('mousemove', () => { if (dragging) dragMoved = true; });
+renderer.domElement.addEventListener('click', (e) => {
+  if (dragMoved) return;
+  const ndc = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  let best = null, bestD = Infinity;
+  for (const [id, ent] of entities) {
+    if (ent.data.dead) continue;
+    const box = new THREE.Box3().setFromObject(ent.mesh);
+    const hit = raycaster.ray.intersectsBox(box);
+    if (hit) {
+      const d = ent.mesh.position.distanceTo(camera.position);
+      if (d < bestD) { bestD = d; best = id; }
+    }
+  }
+  if (best) setTarget(best);
+});
+
+let targetId = null;
+function setTarget(id) {
+  targetId = id;
+  net.send(MSG.TARGET, { id });
+  updateTargetFrame();
+}
+function updateTargetFrame() {
+  const ent = targetId ? entities.get(targetId) : null;
+  ui.setTarget(ent ? { ...ent.data } : null);
+}
+function targetNearest() {
+  let best = null, bestD = 60;
+  for (const [id, ent] of entities) {
+    const d = ent.data;
+    if (d.dead || d.kind === 'npc') continue;
+    const enemy = d.kind === 'mob' || (d.realm && d.realm !== myRealmId);
+    if (!enemy) continue;
+    const dd = Math.hypot(ent.tx - me.x, ent.tz - me.z);
+    if (dd < bestD) { bestD = dd; best = id; }
+  }
+  if (best) setTarget(best);
+}
+function interactNearest() {
+  let best = null, bestD = 12;
+  for (const [id, ent] of entities) {
+    if (ent.data.kind !== 'npc') continue;
+    const dd = Math.hypot(ent.tx - me.x, ent.tz - me.z);
+    if (dd < bestD) { bestD = dd; best = id; }
+  }
+  if (best) net.send(MSG.INTERACT, { id: best });
+}
+
+// ---------- Réseau ----------
+let myRealmId = null;
+
+net.on(MSG.WELCOME, (m) => {
+  selfId = m.selfId;
+  // place le personnage à sa position réelle (restaurée le cas échéant)
+  if (m.spawn && myMesh) {
+    me.x = m.spawn.x; me.z = m.spawn.z;
+    myMesh.position.set(me.x, 0, me.z);
+  }
+});
+net.on(MSG.SELF, (m) => {
+  const s = m.self;
+  if (!ui.cls) ui.setIdentity(s);
+  if (myChar) Roster.update(myChar.name, myChar.realm, myChar.cls, { lvl: s.lvl, gold: s.gold });
+  ui.setSelf(s);
+  ui.setCooldowns(s.cooldowns);
+  ui.updateQuestLog(s.quests);
+  me.dead = s.dead;
+  me.stealthed = s.stealthed;
+});
+net.on(MSG.STATE, (m) => {
+  syncEntities(m.e, myRealmId);
+  ui.setSelf({ ...m.me, name: undefined });
+  me.stealthed = m.me.stealthed;
+  ui.setFort(m.fort.owner, m.fort.progress);
+  if (fortFlagMat) fortFlagMat.color.setHex(m.fort.owner ? REALMS[m.fort.owner].color : 0xaaaaaa);
+  updateTargetFrame();
+  if (targetId && !entities.has(targetId)) { targetId = null; ui.setTarget(null); }
+});
+net.on(MSG.EVENT, (m) => {
+  ui.log(m.text, m.cat);
+  if (m.shop) ui.showShop(m.shop);
+  if (m.quests) ui.showQuests(m.quests);
+  if (m.cat === 'levelup' && myMesh) {
+    spawnRing({ x: me.x, z: me.z }, 0xffe45c, 8);
+    spawnSparkles(entPos(selfId), 0xffe45c, 1.6);
+  }
+});
+net.on(MSG.CHAT_BC, (m) => ui.log(`[${m.from}] ${m.text}`, 'chat'));
+net.on(MSG.DEAD, () => { me.dead = true; ui.death(true); });
+
+// ---------- Boucle ----------
+const clock = new THREE.Clock();
+let moveAcc = 0;
+let myPrev = new THREE.Vector3();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+  const elapsed = clock.elapsedTime;
+
+  if (started && myMesh) {
+    if (!me.dead && !ui.chatOpen) {
+      let fwd = 0, strafe = 0;
+      if (keys.KeyW || keys.KeyZ || keys.ArrowUp) fwd += 1;
+      if (keys.KeyS || keys.ArrowDown) fwd -= 1;
+      if (keys.KeyA || keys.KeyQ || keys.ArrowLeft) strafe += 1;
+      if (keys.KeyD || keys.ArrowRight) strafe -= 1;
+      if (fwd || strafe) {
+        const speed = me.stealthed ? 8 : 16;
+        const ang = camYaw + Math.atan2(strafe, fwd);
+        me.x += Math.sin(ang) * speed * dt;
+        me.z += Math.cos(ang) * speed * dt;
+        // prédiction des collisions (le serveur reste autoritaire)
+        let cpos = resolveMove(me.x, me.z, 1.0);
+        const others = [];
+        for (const ent of entities.values()) {
+          if (ent.data.dead || ent.data.kind === 'companion') continue;
+          const p = ent.mesh.position;
+          if (Math.abs(p.x - cpos.x) > 6 || Math.abs(p.z - cpos.z) > 6) continue;
+          others.push({ x: p.x, z: p.z, r: entityRadius(ent.data.kind) });
+        }
+        if (others.length) cpos = pushApart(cpos.x, cpos.z, 1.0, others);
+        me.x = cpos.x; me.z = cpos.z;
+        me.ry = ang;
+        myMesh.rotation.y = ang;
+      }
+      moveAcc += dt;
+      if (moveAcc > 0.1) { moveAcc = 0; net.send(MSG.MOVE, { x: me.x, z: me.z, ry: me.ry }); }
+    }
+    myMesh.position.set(me.x, 0, me.z);
+    myMesh.visible = !me.dead;
+    myMesh.traverse((o) => { if (o.material && !o.material.map) { o.material.transparent = me.stealthed; o.material.opacity = me.stealthed ? 0.35 : 1; } });
+
+    // animation du joueur local
+    const mySpeed = myMesh.position.distanceTo(myPrev) / Math.max(dt, 0.001);
+    myPrev.copy(myMesh.position);
+    animateBody(myMesh, mySpeed, dt, elapsed);
+
+    // interpolation + animation des autres entités
+    for (const ent of entities.values()) {
+      const p = ent.mesh.position;
+      const px = p.x, pz = p.z;
+      p.x += (ent.tx - p.x) * Math.min(1, dt * 8);
+      p.z += (ent.tz - p.z) * Math.min(1, dt * 8);
+      ent.mesh.rotation.y += (ent.try - ent.mesh.rotation.y) * Math.min(1, dt * 8);
+      const spd = Math.hypot(p.x - px, p.z - pz) / Math.max(dt, 0.001);
+      animateBody(ent.mesh, spd, dt, elapsed);
+    }
+
+    // effets visuels
+    fxUpdate(dt);
+
+    // caméra orbitale
+    const cx = me.x + Math.sin(camYaw) * -camDist * Math.cos(camPitch);
+    const cz = me.z + Math.cos(camYaw) * -camDist * Math.cos(camPitch);
+    const cy = 3 + Math.sin(camPitch) * camDist;
+    camera.position.set(cx, cy, cz);
+    camera.lookAt(me.x, 4, me.z);
+    sun.position.set(me.x + 120, 220, me.z + 80);
+    sun.target.position.set(me.x, 0, me.z);
+    sun.target.updateMatrixWorld();
+  }
+
+  renderer.render(scene, camera);
+}
+
+function fxUpdate(dt) {
+  for (let i = fxList.length - 1; i >= 0; i--) {
+    const f = fxList[i];
+    f.update(f, dt);
+    f.life -= dt;
+    if (f.life <= 0) {
+      f.obj.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      scene.remove(f.obj);
+      fxList.splice(i, 1);
+    }
+  }
+}
+
+// ---------- Démarrage ----------
+buildWorld();
+animate();
+
+let myChar = null;
+
+async function enterGame(create) {
+  await net.ready;
+  myRealmId = create.realm;
+  myClsId = create.cls;
+  myChar = { name: create.name, realm: create.realm, cls: create.cls };
+  Roster.upsert(create); // mémorise le personnage dans le roster local (écran de sélection)
+  net.send(MSG.CREATE, create);
+  initSelf(create);
+  started = true;
+  document.getElementById('charselect').classList.add('hidden');
+  document.getElementById('charcreate').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  ui.log(`Bienvenue dans ${REALMS[create.realm].name}, ${create.name} !`, 'system');
+  ui.log("Parlez à l'émissaire (E) pour obtenir des quêtes. Le Fort Central vous attend au centre de la grande zone frontalière.", 'info');
+}
+
+function beginCreate() {
+  document.getElementById('charselect').classList.add('hidden');
+  document.getElementById('charcreate').classList.remove('hidden');
+  charCreate(enterGame);
+}
+
+// Au lancement : écran de sélection si au moins un personnage existe, sinon création
+if (!charSelect({ onPlay: enterGame, onCreate: beginCreate })) beginCreate();
+</script>
+</body>
+</html>
