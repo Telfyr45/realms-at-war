@@ -125,3 +125,28 @@ canvas { display: block; }
 
 #help { bottom: 0; left: 50%; transform: translateX(-50%); font-size: 11px; color: #707890;
   padding: 3px 10px; background: rgba(8,10,16,.6); border-radius: 6px 6px 0 0; white-space: nowrap; }
+
+/* ===== Entraîneur · Armurier · Inventaire ===== */
+.dsub { color: #9aa0b5; font-size: 12px; margin: -2px 0 10px; }
+.dbtn .sd { color: #8b93a7; font-weight: 400; font-size: 11px; }
+.dbtn.dis, .dbtn:disabled { opacity: .5; cursor: not-allowed; }
+.skill .lk.train { color: #7ee08a; }
+
+#inventory {
+  position: absolute; right: 12px; top: 70px; width: 440px; max-height: 74vh; overflow-y: auto;
+  background: rgba(12, 14, 22, .96); border: 1px solid #3a3f55; border-radius: 10px; padding: 14px; z-index: 40;
+}
+#inventory h3 { color: #f0d889; font-size: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+#inv-gold { color: #e9c46a; font-size: 13px; font-weight: 600; }
+.inv-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.inv-h { color: #c9b873; font-size: 12px; margin-bottom: 6px; border-bottom: 1px solid #2c3147; padding-bottom: 3px; }
+.inv-slot { background: #161a28; border: 1px solid #2c3147; border-radius: 7px; padding: 6px 9px; margin-bottom: 6px; }
+.inv-slot.filled { cursor: pointer; }
+.inv-slot.filled:hover { background: #1d2238; }
+.slk { font-size: 10px; color: #707890; text-transform: uppercase; letter-spacing: .5px; }
+.itn { font-size: 13px; font-weight: 600; }
+.its { font-size: 11px; color: #9aa0b5; margin-top: 1px; }
+.ite { font-size: 12px; color: #5d667e; }
+.inv-item { background: #161a28; border: 1px solid #2c3147; border-left: 4px solid #888; border-radius: 7px; padding: 6px 9px; margin-bottom: 6px; cursor: pointer; }
+.inv-item:hover { background: #1d2238; }
+.inv-tip { margin-top: 10px; font-size: 11px; color: #707890; }
