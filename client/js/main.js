@@ -8,6 +8,7 @@ import { UI } from './ui.js';
 import { charCreate } from './charcreate.js';
 import { charSelect, Roster } from './charselect.js';
 import { Sound } from './sound.js';
+import { setupMovableUI, resetUI } from './uikit.js';
 import { REALMS, WORLD, FRONTIER, MSG, classById, ARCHETYPES, raceTraits } from '/shared/data.js';
 import { SCENERY, resolveMove, pushApart, entityRadius } from '/shared/collision.js';
 
@@ -20,6 +21,9 @@ function initAudioOnce() {
   removeEventListener('pointerdown', initAudioOnce); removeEventListener('keydown', initAudioOnce);
 }
 addEventListener('pointerdown', initAudioOnce); addEventListener('keydown', initAudioOnce);
+
+// panneaux du HUD déplaçables / redimensionnables (disposition mémorisée)
+setupMovableUI();
 
 let selfId = null;
 let me = { x: 0, z: 0, ry: 0, dead: false, stealthed: false };
@@ -128,24 +132,57 @@ const texMat = (tex, color = 0xffffff) => new THREE.MeshLambertMaterial({ map: t
 const stoneMat = () => texMat(TEX.stone);
 const woodMat = () => texMat(TEX.wood);
 
+// ---------- Biomes ----------
+const BIOME = {
+  alb:      { ground: 0x5a7d3a, grassCol: 0x6f9a3c, flowers: [0xffe24a, 0xffffff, 0xff7d9c], foliage: 0x2f6b33, density: 1.0, pines: 0.2, snow: false },
+  hib:      { ground: 0x376b30, grassCol: 0x3f8a34, flowers: [0xb066ff, 0xff77cc, 0xfff0a0], foliage: 0x256b34, density: 1.8, pines: 0.5, snow: false },
+  mid:      { ground: 0x9fb0bb, grassCol: 0x8fa39a, flowers: [0xbfe0ef], foliage: 0x35563f, density: 0.5, pines: 1.0, snow: true },
+  frontier: { ground: 0x7a6f4a, grassCol: 0x847848, flowers: [], foliage: 0x4a5a32, density: 0.4, pines: 0.05, snow: false },
+};
+function biomeAt(x, z) {
+  if (Math.hypot(x, z) < FRONTIER.radius * 0.9) return 'frontier';
+  let best = 'frontier', bd = Infinity;
+  for (const r of Object.values(REALMS)) { const d = Math.hypot(x - r.base.x, z - r.base.z); if (d < bd) { bd = d; best = r.id; } }
+  return best;
+}
+function srand(seed) { return function () { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function nearRoad(x, z) {
+  for (const r of Object.values(REALMS)) {
+    const L2 = r.base.x * r.base.x + r.base.z * r.base.z || 1;
+    let t = (x * r.base.x + z * r.base.z) / L2; t = Math.max(0, Math.min(1, t));
+    if (Math.hypot(x - r.base.x * t, z - r.base.z * t) < 16) return true;
+  }
+  return false;
+}
+
 // ---------- Monde low poly ----------
 function buildWorld() {
   const half = WORLD.size / 2;
   const groundGeo = new THREE.PlaneGeometry(WORLD.size, WORLD.size, 48, 48);
   groundGeo.rotateX(-Math.PI / 2);
   const pos = groundGeo.attributes.position;
+  const COL = []; const tmpc = new THREE.Color(); const snowC = new THREE.Color(0xeef3f8);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    let h = Math.sin(x * 0.013) * Math.cos(z * 0.011) * 6 + Math.sin(x * 0.031 + z * 0.027) * 2.5;
-    const flatten = Math.min(
-      Math.hypot(x, z),
-      ...Object.values(REALMS).map((r) => Math.hypot(x - r.base.x, z - r.base.z))
-    );
+    let h = Math.sin(x * 0.006) * Math.cos(z * 0.0055) * 16   // grandes collines
+          + Math.sin(x * 0.013) * Math.cos(z * 0.011) * 6     // ondulations
+          + Math.sin(x * 0.031 + z * 0.027) * 2.5;            // détail
+    const dc = Math.hypot(x, z);
+    const edge = Math.max(0, (dc - half * 0.6) / (half * 0.4)); // montagnes de bordure
+    h += edge * edge * 90;
+    let flatten = Math.min(dc, ...Object.values(REALMS).map((r) => Math.hypot(x - r.base.x, z - r.base.z)));
+    if (nearRoad(x, z)) flatten = Math.min(flatten, 12); // routes praticables
     h *= THREE.MathUtils.clamp((flatten - 40) / 120, 0, 1);
     pos.setY(i, h);
+    const b = BIOME[biomeAt(x, z)];
+    tmpc.setHex(b.ground);
+    if (b.snow) tmpc.lerp(snowC, 0.5);
+    if (h > 40) tmpc.lerp(snowC, Math.min(0.85, (h - 40) / 45)); // sommets enneigés
+    COL.push(tmpc.r, tmpc.g, tmpc.b);
   }
+  groundGeo.setAttribute('color', new THREE.Float32BufferAttribute(COL, 3));
   groundGeo.computeVertexNormals();
-  const ground = new THREE.Mesh(groundGeo, texMat(TEX.grass));
+  const ground = new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ map: TEX.grass, vertexColors: true }));
   ground.receiveShadow = true;
   scene.add(ground);
 
@@ -211,13 +248,85 @@ function buildWorld() {
   for (const r of Object.values(REALMS)) buildCapital(r);
   buildFort();
 
-  const mGeo = new THREE.ConeGeometry(60, 130, 5);
-  for (let a = 0; a < Math.PI * 2; a += 0.22) {
-    const m = new THREE.Mesh(mGeo, mat(0x39415a));
-    m.position.set(Math.cos(a) * (half + 30), 20, Math.sin(a) * (half + 30));
-    m.rotation.y = a;
-    scene.add(m);
+  // chaîne de montagnes en bordure, sommets enneigés
+  for (let a = 0; a < Math.PI * 2; a += 0.15) {
+    const rr = half + 18 + Math.sin(a * 7) * 45;
+    const hgt = 120 + Math.sin(a * 5) * 55 + Math.cos(a * 11) * 25;
+    const peak = new THREE.Mesh(new THREE.ConeGeometry(72, hgt, 5), mat(0x495064));
+    peak.position.set(Math.cos(a) * rr, hgt / 2 - 12, Math.sin(a) * rr); peak.rotation.y = a * 3;
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(72 * 0.4, hgt * 0.34, 5), mat(0xeef3f8));
+    cap.position.set(peak.position.x, hgt - 12 - hgt * 0.05, peak.position.z); cap.rotation.y = peak.rotation.y;
+    scene.add(peak, cap);
   }
+  buildScenery(half);
+}
+
+// Décor instancié non-bloquant : herbe, fleurs, buissons, sapins (par biome)
+function buildScenery(half) {
+  const rnd = srand(13371);
+  const dummy = new THREE.Object3D(); const col = new THREE.Color();
+  const ok = (x, z) => Math.abs(x) < half * 0.95 && Math.abs(z) < half * 0.95 &&
+    Math.hypot(x, z) > FRONTIER.fortRadius + 28 &&
+    !Object.values(REALMS).some((r) => Math.hypot(x - r.base.x, z - r.base.z) < 68);
+
+  // --- herbe ---
+  const blade = new THREE.ConeGeometry(0.14, 1.0, 4); blade.translate(0, 0.5, 0);
+  const GN = 4200; const grass = new THREE.InstancedMesh(blade, new THREE.MeshLambertMaterial({}), GN);
+  let gi = 0;
+  for (let i = 0; i < GN * 3 && gi < GN; i++) {
+    const x = (rnd() - 0.5) * WORLD.size * 0.95, z = (rnd() - 0.5) * WORLD.size * 0.95;
+    if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
+    if (rnd() > b.density * 0.55) continue;
+    dummy.position.set(x, 0, z); dummy.rotation.y = rnd() * 6.28;
+    const s = 0.6 + rnd() * 1.3; dummy.scale.set(s, s * (0.7 + rnd()), s); dummy.updateMatrix();
+    grass.setMatrixAt(gi, dummy.matrix); col.setHex(b.grassCol).offsetHSL(0, 0, (rnd() - 0.5) * 0.12); grass.setColorAt(gi, col); gi++;
+  }
+  grass.count = gi; grass.instanceMatrix.needsUpdate = true; if (grass.instanceColor) grass.instanceColor.needsUpdate = true; grass.castShadow = false; scene.add(grass);
+
+  // --- fleurs ---
+  const bloom = new THREE.IcosahedronGeometry(0.26, 0); bloom.translate(0, 0.55, 0);
+  const FN = 1100; const flowers = new THREE.InstancedMesh(bloom, new THREE.MeshLambertMaterial({}), FN);
+  let fi = 0;
+  for (let i = 0; i < FN * 4 && fi < FN; i++) {
+    const x = (rnd() - 0.5) * WORLD.size * 0.95, z = (rnd() - 0.5) * WORLD.size * 0.95;
+    if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
+    if (!b.flowers.length || rnd() > b.density * 0.4) continue;
+    dummy.position.set(x, 0, z); dummy.rotation.y = rnd() * 6.28; const s = 0.7 + rnd() * 0.7; dummy.scale.setScalar(s); dummy.updateMatrix();
+    flowers.setMatrixAt(fi, dummy.matrix); col.setHex(b.flowers[(rnd() * b.flowers.length) | 0]); flowers.setColorAt(fi, col); fi++;
+  }
+  flowers.count = fi; flowers.instanceMatrix.needsUpdate = true; if (flowers.instanceColor) flowers.instanceColor.needsUpdate = true; scene.add(flowers);
+
+  // --- buissons ---
+  const bushG = new THREE.IcosahedronGeometry(1.2, 0); const BN = 600;
+  const bushes = new THREE.InstancedMesh(bushG, new THREE.MeshLambertMaterial({ flatShading: true }), BN);
+  let bi = 0;
+  for (let i = 0; i < BN * 4 && bi < BN; i++) {
+    const x = (rnd() - 0.5) * WORLD.size * 0.92, z = (rnd() - 0.5) * WORLD.size * 0.92;
+    if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
+    if (rnd() > b.density * 0.3) continue;
+    dummy.position.set(x, 0.8 + rnd() * 0.4, z); dummy.rotation.set(rnd(), rnd() * 6.28, rnd()); const s = 0.7 + rnd() * 1.1; dummy.scale.setScalar(s); dummy.updateMatrix();
+    bushes.setMatrixAt(bi, dummy.matrix); col.setHex(b.foliage).offsetHSL(0, 0, (rnd() - 0.5) * 0.08); bushes.setColorAt(bi, col); bi++;
+  }
+  bushes.count = bi; bushes.instanceMatrix.needsUpdate = true; if (bushes.instanceColor) bushes.instanceColor.needsUpdate = true; bushes.castShadow = true; scene.add(bushes);
+
+  // --- sapins/arbres d'ambiance (tronc + frondaison instanciés) ---
+  const TN = 900;
+  const trunkG = new THREE.CylinderGeometry(0.5, 0.7, 4, 5); trunkG.translate(0, 2, 0);
+  const folG = new THREE.ConeGeometry(2.6, 8, 6); folG.translate(0, 8, 0);
+  const trunks = new THREE.InstancedMesh(trunkG, new THREE.MeshLambertMaterial({ color: 0x6b4a2e }), TN);
+  const fols = new THREE.InstancedMesh(folG, new THREE.MeshLambertMaterial({}), TN);
+  let ti = 0;
+  for (let i = 0; i < TN * 5 && ti < TN; i++) {
+    const x = (rnd() - 0.5) * WORLD.size * 0.92, z = (rnd() - 0.5) * WORLD.size * 0.92;
+    if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
+    if (rnd() > b.pines * 0.5) continue;
+    dummy.position.set(x, 0, z); dummy.rotation.y = rnd() * 6.28; const s = 0.8 + rnd() * 0.9; dummy.scale.set(s, s * (0.9 + rnd() * 0.5), s); dummy.updateMatrix();
+    trunks.setMatrixAt(ti, dummy.matrix); fols.setMatrixAt(ti, dummy.matrix);
+    col.setHex(b.foliage).offsetHSL(0, 0, (rnd() - 0.5) * 0.06); fols.setColorAt(ti, col);
+    if (b.snow && rnd() < 0.5) fols.setColorAt(ti, col.lerp(new THREE.Color(0xeef3f8), 0.4));
+    ti++;
+  }
+  trunks.count = ti; fols.count = ti; trunks.instanceMatrix.needsUpdate = true; fols.instanceMatrix.needsUpdate = true; if (fols.instanceColor) fols.instanceColor.needsUpdate = true; fols.castShadow = true; scene.add(trunks, fols);
 }
 
 function buildCapital(r) {
@@ -392,6 +501,51 @@ function spawnRing(pos, color, maxR = 5) {
   });
 }
 
+// flash plein écran (DOM) pour les moments forts
+function screenFlash(color = 'rgba(255,228,120,0.5)', ms = 520) {
+  const d = document.createElement('div');
+  d.style.cssText = `position:fixed;inset:0;background:${color};pointer-events:none;z-index:200;opacity:0.8;transition:opacity ${ms}ms ease-out;`;
+  document.body.appendChild(d);
+  requestAnimationFrame(() => { d.style.opacity = '0'; });
+  setTimeout(() => d.remove(), ms + 100);
+}
+
+// super effet de montée de niveau
+function spawnLevelUp(pos) {
+  const gold = 0xffe45c, gold2 = 0xfff0b0;
+  // pilier de lumière tournant
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 28, 16, 1, true), fxMat(gold, 0.5));
+  pillar.position.set(pos.x, 14, pos.z);
+  addFx(pillar, 1.2, (f, dt) => {
+    const k = 1 - f.life / f.max;
+    pillar.scale.set(1 + k * 0.7, 1, 1 + k * 0.7);
+    pillar.rotation.y += dt * 2.5;
+    pillar.material.opacity = 0.5 * (1 - k);
+  });
+  // halo au sol
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(6, 28), fxMat(gold2, 0.6));
+  halo.rotation.x = -Math.PI / 2; halo.position.set(pos.x, 0.3, pos.z);
+  addFx(halo, 1.0, (f, dt) => { const k = 1 - f.life / f.max; halo.scale.setScalar(1 + k * 1.8); halo.material.opacity = 0.6 * (1 - k); });
+  // anneaux concentriques échelonnés
+  spawnRing(pos, gold, 7);
+  setTimeout(() => spawnRing(pos, gold2, 11), 150);
+  setTimeout(() => spawnRing(pos, gold, 16), 320);
+  // colonne de particules ascendantes
+  const col = new THREE.Group(); col.position.set(pos.x, 0, pos.z);
+  const parts = [];
+  for (let i = 0; i < 30; i++) {
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), fxMat(i % 2 ? gold : gold2));
+    const a = Math.random() * Math.PI * 2, r = Math.random() * 2.4;
+    m.position.set(Math.cos(a) * r, Math.random() * 2, Math.sin(a) * r);
+    parts.push({ m, vy: 7 + Math.random() * 8, spin: Math.random() * 6 }); col.add(m);
+  }
+  addFx(col, 1.5, (f, dt) => { for (const p of parts) { p.m.position.y += p.vy * dt; p.m.rotation.y += p.spin * dt; p.m.rotation.x += p.spin * dt; p.m.material.opacity = f.life / f.max; } });
+  // éclat central + flash + son
+  spawnBurst(new THREE.Vector3(pos.x, 3, pos.z), gold, 26, 0.5);
+  screenFlash();
+  Sound.play('levelup_big');
+}
+
 // position d'une entité (suivie en continu pour les projectiles)
 const entPos = (id) => () => {
   if (id === selfId) return { x: me.x, z: me.z };
@@ -454,10 +608,33 @@ function castFx(slot) {
   }
 }
 
+// cooldown local optimiste — évite de rejouer l'effet visuel d'un sort en recharge
+const localCd = {};
+function canCast(slot) {
+  if (!ui.learned || !ui.learned.includes(slot)) return false;
+  const cls = classById(myClsId);
+  const sk = cls && ARCHETYPES[cls.arch].skills[slot];
+  if (!sk) return false;
+  const t = Date.now();
+  if (((ui.cooldowns && ui.cooldowns['s' + slot]) || 0) > t) return false; // recharge serveur
+  if ((localCd[slot] || 0) > t) return false;                               // recharge locale
+  const lvl = (ui.self && ui.self.lvl) || 1;
+  if (ui.self && ui.self.power < sk.cost * (1 + lvl * 0.06)) return false;   // puissance insuffisante
+  return true;
+}
+function setLocalCd(slot) {
+  const cls = classById(myClsId);
+  const sk = cls && ARCHETYPES[cls.arch].skills[slot];
+  if (sk) localCd[slot] = Date.now() + sk.cd * 1000;
+}
+
 // les effets s'ajoutent aux envois réseau, sans toucher à la logique
 const _origSend = net.send.bind(net);
 net.send = (type, data = {}) => {
-  if (started && type === MSG.SKILL) castFx(data.slot);
+  if (started && type === MSG.SKILL) {
+    if (!canCast(data.slot)) return;   // anti-spam : ni envoi réseau, ni effet visuel, ni son
+    castFx(data.slot); setLocalCd(data.slot); Sound.play('cast');
+  }
   if (started && type === MSG.ATTACK && data.on && myMesh) startSwing(myMesh);
   _origSend(type, data);
 };
@@ -700,6 +877,7 @@ function initSelf(create) {
 let camYaw = 0, camPitch = 0.45, camDist = 26;
 let dragging = false, lastMx = 0, lastMy = 0;
 const keys = {};
+let jumpY = 0, jumpV = 0; // saut local (cosmétique)
 
 addEventListener('keydown', (e) => {
   if (ui.chatOpen) return;
@@ -708,13 +886,18 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyM') { const m = Sound.toggle(); ui.log(m ? '🔇 Sons coupés (M)' : '🔊 Sons activés (M)', 'info'); }
   if (e.code.startsWith('Digit')) {
     const n = parseInt(e.code.slice(5), 10);
-    if (n >= 1 && n <= 9) { net.send(MSG.SKILL, { slot: n - 1 }); Sound.play('cast'); }
+    if (n >= 1 && n <= 9) net.send(MSG.SKILL, { slot: n - 1 });
+  }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (started && !me.dead && jumpY <= 0.05 && jumpV === 0) { jumpV = 14; Sound.play('jump'); }
   }
   if (e.code === 'KeyR') net.send(MSG.ATTACK, { on: true });
   if (e.code === 'KeyT') net.send(MSG.USE_ITEM, { id: 'potion_hp' });
   if (e.code === 'KeyY') net.send(MSG.USE_ITEM, { id: 'potion_pw' });
   if (e.code === 'KeyJ') ui.toggleQuestLog();
   if (e.code === 'KeyI') ui.toggleInventory();
+  if (e.code === 'KeyU') { resetUI(); ui.log("Disposition de l'interface réinitialisée (U).", 'info'); }
   if (e.code === 'KeyF') targetNearest();
   if (e.code === 'KeyE') interactNearest();
   if (e.code === 'Escape') { setTarget(null); document.getElementById('dialog').classList.add('hidden'); }
@@ -830,15 +1013,11 @@ net.on(MSG.EVENT, (m) => {
   if (m.loot && myMesh) spawnSparkles(entPos(selfId), 0xf0d889, 1.3);
   // sons selon l'événement
   if (m.loot || m.cat === 'loot') Sound.play('loot');
-  else if (m.cat === 'levelup') Sound.play('levelup');
   else if (m.cat === 'rvr') Sound.play(/🏰/.test(m.text) ? 'fort' : 'kill');
   else if (m.cat === 'quest') Sound.play('quest');
   else if (m.cat === 'system' && /apprise/i.test(m.text)) Sound.play('learn');
   else if (m.cat === 'combat') Sound.play(/PV|soign/i.test(m.text) ? 'heal' : 'hit');
-  if (m.cat === 'levelup' && myMesh) {
-    spawnRing({ x: me.x, z: me.z }, 0xffe45c, 8);
-    spawnSparkles(entPos(selfId), 0xffe45c, 1.6);
-  }
+  if (m.cat === 'levelup' && myMesh) spawnLevelUp({ x: me.x, z: me.z });
 });
 net.on(MSG.CHAT_BC, (m) => ui.log(`[${m.from}] ${m.text}`, 'chat'));
 net.on(MSG.DEAD, () => { me.dead = true; ui.death(true); Sound.play('death'); });
@@ -882,7 +1061,12 @@ function animate() {
       moveAcc += dt;
       if (moveAcc > 0.1) { moveAcc = 0; net.send(MSG.MOVE, { x: me.x, z: me.z, ry: me.ry }); }
     }
-    myMesh.position.set(me.x, 0, me.z);
+    // saut (cosmétique, prédiction locale)
+    if (jumpV !== 0 || jumpY > 0) {
+      jumpY += jumpV * dt; jumpV -= 40 * dt;
+      if (jumpY <= 0) { jumpY = 0; jumpV = 0; }
+    }
+    myMesh.position.set(me.x, jumpY, me.z);
     myMesh.visible = !me.dead;
     myMesh.traverse((o) => { if (o.material && !o.material.map) { o.material.transparent = me.stealthed; o.material.opacity = me.stealthed ? 0.35 : 1; } });
 

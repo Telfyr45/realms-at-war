@@ -79,6 +79,11 @@ export const Sound = {
         this.tone({ freq: 720, type: 'sine', dur: 0.06, gain: 0.09 }); break;
       case 'quest':
         [587, 880].forEach((f, i) => this.tone({ freq: f, type: 'sine', dur: 0.2, gain: 0.15, delay: i * 0.1 })); break;
+      case 'jump': if (!this._throttle('jump', 120)) return;
+        this.tone({ freq: 300, type: 'sine', dur: 0.18, gain: 0.12, slideTo: 620 }); break;
+      case 'levelup_big':
+        [392, 523, 659, 784, 1047, 1319].forEach((f, i) => this.tone({ freq: f, type: 'triangle', dur: 0.5, gain: 0.22, delay: i * 0.08 }));
+        this.noise({ dur: 0.5, gain: 0.12, cut: 3000, delay: 0.1 }); break;
     }
   },
 };

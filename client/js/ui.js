@@ -141,7 +141,7 @@ export class UI {
         ? `${name} — ${TYPE_LABEL[sk.t] || sk.t} · recharge ${sk.cd}s · coût ${sk.cost}`
         : (lvl < (sk.lvl || 1) ? `${name} — niveau ${sk.lvl} requis` : `${name} — à apprendre chez l'entraîneur (E)`);
       d.onclick = () => {
-        if (known) { this.net.send(MSG.SKILL, { slot: i }); Sound.play('cast'); }
+        if (known) this.net.send(MSG.SKILL, { slot: i });
         else this.log("Compétence non apprise — rendez-vous chez l'entraîneur de votre capitale (E).", 'info');
       };
       d.dataset.slot = i;

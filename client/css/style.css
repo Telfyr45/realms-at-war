@@ -150,3 +150,8 @@ canvas { display: block; }
 .inv-item { background: #161a28; border: 1px solid #2c3147; border-left: 4px solid #888; border-radius: 7px; padding: 6px 9px; margin-bottom: 6px; cursor: pointer; }
 .inv-item:hover { background: #1d2238; }
 .inv-tip { margin-top: 10px; font-size: 11px; color: #707890; }
+
+/* ===== Panneaux déplaçables / redimensionnables ===== */
+.movable { resize: both; overflow: auto; min-width: 130px; min-height: 38px; pointer-events: auto; }
+.movable:hover { outline: 1px dashed rgba(240, 216, 137, .35); outline-offset: 2px; }
+#skillbar.movable { overflow: visible; resize: none; }
