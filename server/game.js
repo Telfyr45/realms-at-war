@@ -6,7 +6,7 @@ import {
   xpForLevel, maxHp, maxPower, MAX_LEVEL,
   skillCost, EQUIP_SLOTS, weightOfArch, genItem, gearBonus, RARITIES,
 } from '../shared/data.js';
-import { resolveMove, pushApart, entityRadius, capitalTransform } from '../shared/collision.js';
+import { resolveMove, pushApart, entityRadius, capitalTransform, SCENERY } from '../shared/collision.js';
 import { walkable } from '../shared/terrain.js';
 
 let NEXT_ID = 1;
@@ -447,6 +447,7 @@ export class Game {
       selfId: p.id,
       spawn: { x: p.x, z: p.z }, // position réelle (restaurée le cas échéant)
       fort: { x: this.fort.x, z: this.fort.z, owner: this.fort.owner },
+      scenery: SCENERY.map((s) => [Math.round(s.x), Math.round(s.z), s.type === 'tree' ? 1 : 0, s.species || '', Math.round((s.scale || 1) * 100) / 100]),
     });
     this.sendSelf(p);
     this.persistPlayer(p);
