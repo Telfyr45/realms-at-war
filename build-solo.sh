@@ -6,6 +6,7 @@ W=$(mktemp -d)
 
 # 1) données partagées (sans 'export'), puis module de collisions (sans import/export)
 sed 's/^export //' shared/data.js > "$W/01_data.js"
+sed -e '/^import /d' -e 's/^export //' shared/terrain.js > "$W/01a_terrain.js"
 sed -e '/^import /d' -e 's/^export //' shared/collision.js > "$W/01b_collision.js"
 
 # 2) logique serveur (sans les imports mono et multi-lignes, sans 'export')

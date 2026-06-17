@@ -4,6 +4,7 @@
 // serveur (collisions) voient exactement les mêmes obstacles.
 // ============================================================
 import { WORLD, REALMS, FRONTIER } from './data.js';
+import { terrainHeight } from './terrain.js';
 
 export function mulberry32(seed) {
   return function () {
@@ -23,29 +24,66 @@ function distToSegment(px, pz, x1, z1, x2, z2) {
   return Math.hypot(px - (x1 + vx * t), pz - (z1 + vz * t));
 }
 
-// ---------- Décor (arbres / rochers) ----------
+// ---------- Décor (arbres / rochers) regroupés en forêts cohérentes ----------
 export const SCENERY = [];
 {
   const rnd = mulberry32(20260612);
-  // densité proportionnelle à la surface de la nouvelle carte (3600²)
-  for (let i = 0; i < 560; i++) {
-    const x = (rnd() - 0.5) * WORLD.size * 0.92;
-    const z = (rnd() - 0.5) * WORLD.size * 0.92;
-    const isTree = rnd() < 0.75;
-    const rot = rnd() * 6.28;
-    // dégager le cœur du Fort Central et l'esplanade de capture
-    if (Math.hypot(x, z) < FRONTIER.fortRadius + 40) continue;
-    // dégager les routes qui relient chaque capitale au centre
-    if (Object.values(REALMS).some((r) => distToSegment(x, z, 0, 0, r.base.x, r.base.z) < 22)) continue;
-    if (Object.values(REALMS).some((r) => Math.hypot(x - r.base.x, z - r.base.z) < 115)) continue;
-    SCENERY.push({ x, z, type: isTree ? 'tree' : 'rock', rot });
+  const HW = WORLD.size * 0.46;
+  const speciesAt = (x, z) => {
+    let best = 'frontier', bd = Infinity;
+    for (const r of Object.values(REALMS)) { const d = Math.hypot(x - r.base.x, z - r.base.z); if (d < bd) { bd = d; best = r.id; } }
+    return best;
+  };
+  const clearForTree = (x, z) => {
+    if (Math.abs(x) > HW || Math.abs(z) > HW) return false;
+    if (Math.hypot(x, z) < FRONTIER.radius * 0.7) return false;              // arène centrale dégagée
+    if (Object.values(REALMS).some((r) => distToSegment(x, z, 0, 0, r.base.x, r.base.z) < 26)) return false; // routes
+    if (Object.values(REALMS).some((r) => Math.hypot(x - r.base.x, z - r.base.z) < 150)) return false;        // villes
+    if (terrainHeight(x, z) > 26) return false;                              // pas d'arbres sur les pentes/montagnes
+    return true;
+  };
+  // bosquets : centres de forêt, arbres droits regroupés
+  for (let f = 0; f < 28; f++) {
+    let cx, cz, tries = 0;
+    do { cx = (rnd() - 0.5) * 2 * HW; cz = (rnd() - 0.5) * 2 * HW; tries++; } while (!clearForTree(cx, cz) && tries < 30);
+    if (tries >= 30) continue;
+    const radius = 55 + rnd() * 120;
+    const sp = speciesAt(cx, cz);
+    const count = 14 + (rnd() * 26 | 0);
+    for (let i = 0; i < count; i++) {
+      const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * radius;
+      const x = cx + Math.cos(a) * rr, z = cz + Math.sin(a) * rr;
+      if (!clearForTree(x, z)) continue;
+      SCENERY.push({ x, z, type: 'tree', species: sp, rot: rnd() * 6.28, scale: 0.82 + rnd() * 0.7 });
+    }
+    const rk = rnd() * 4 | 0;
+    for (let i = 0; i < rk; i++) {
+      const a = rnd() * Math.PI * 2, rr = radius * (0.6 + rnd() * 0.6);
+      const x = cx + Math.cos(a) * rr, z = cz + Math.sin(a) * rr;
+      if (clearForTree(x, z)) SCENERY.push({ x, z, type: 'rock', rot: rnd() * 6.28, scale: 0.9 + rnd() * 1.3 });
+    }
+  }
+  // arbres isolés clairsemés
+  for (let i = 0; i < 130; i++) {
+    const x = (rnd() - 0.5) * 2 * HW, z = (rnd() - 0.5) * 2 * HW;
+    if (!clearForTree(x, z)) continue;
+    SCENERY.push({ x, z, type: 'tree', species: speciesAt(x, z), rot: rnd() * 6.28, scale: 0.82 + rnd() * 0.7 });
+  }
+  // champs de rochers sur les coteaux
+  for (let i = 0; i < 170; i++) {
+    const x = (rnd() - 0.5) * 2 * HW, z = (rnd() - 0.5) * 2 * HW;
+    if (Math.hypot(x, z) < FRONTIER.fortRadius + 50) continue;
+    if (Object.values(REALMS).some((r) => Math.hypot(x - r.base.x, z - r.base.z) < 120)) continue;
+    const th = terrainHeight(x, z);
+    if (th < 6 || th > 32) continue;
+    SCENERY.push({ x, z, type: 'rock', rot: rnd() * 6.28, scale: 1.0 + rnd() * 1.9 });
   }
 }
 
 // ---------- Obstacles statiques ----------
 export const OBSTACLES = { circles: [], segments: [] };
 for (const s of SCENERY) {
-  OBSTACLES.circles.push({ x: s.x, z: s.z, r: s.type === 'tree' ? 1.2 : 2.6 });
+  OBSTACLES.circles.push({ x: s.x, z: s.z, r: s.type === 'tree' ? 1.3 : 2.0 * (s.scale || 1) });
 }
 
 // transformation locale -> monde d'une capitale (même rotation que le rendu)

@@ -11,6 +11,7 @@ import { Sound } from './sound.js';
 import { setupMovableUI, resetUI } from './uikit.js';
 import { REALMS, WORLD, FRONTIER, MSG, classById, ARCHETYPES, raceTraits } from '/shared/data.js';
 import { SCENERY, resolveMove, pushApart, entityRadius } from '/shared/collision.js';
+import { terrainHeight, walkable } from '/shared/terrain.js';
 
 const net = new Net();
 const ui = new UI(net);
@@ -31,15 +32,20 @@ let started = false;
 let myClsId = null;
 
 // ---------- Scène ----------
+const SKY_TOP = 0x3f6fb0, SKY_HORIZON = 0xbcd3e6;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0e1320);
-scene.fog = new THREE.Fog(0x0e1320, 220, 520);
+scene.background = new THREE.Color(SKY_HORIZON);
+scene.fog = new THREE.Fog(SKY_HORIZON, 380, 1700);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1200);
+const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -47,18 +53,31 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.AmbientLight(0x8090b0, 0.9));
-const sun = new THREE.DirectionalLight(0xfff2d0, 1.4);
-sun.position.set(120, 220, 80);
+// ciel en dégradé
+{
+  const cv = document.createElement('canvas'); cv.width = 16; cv.height = 256;
+  const g = cv.getContext('2d').createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, '#39669f'); g.addColorStop(0.55, '#8fb6d8'); g.addColorStop(1, '#d3e4ee');
+  const c = cv.getContext('2d'); c.fillStyle = g; c.fillRect(0, 0, 16, 256);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(3200, 24, 16), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false, depthWrite: false }));
+  scene.add(dome);
+}
+
+// éclairage : ciel/sol + soleil chaud avec ombres douces
+scene.add(new THREE.HemisphereLight(0xbcd6ec, 0x4a4733, 0.85));
+const sun = new THREE.DirectionalLight(0xfff1da, 2.4);
+sun.position.set(160, 320, 120);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-const sc = 300;
+sun.shadow.bias = -0.0004;
+const sc = 230;
 sun.shadow.camera.left = -sc; sun.shadow.camera.right = sc;
 sun.shadow.camera.top = sc; sun.shadow.camera.bottom = -sc;
-sun.shadow.camera.far = 700;
-scene.add(sun);
+sun.shadow.camera.near = 10; sun.shadow.camera.far = 900;
+scene.add(sun, sun.target);
 
-const mat = (color, flat = true) => new THREE.MeshLambertMaterial({ color, flatShading: flat });
+const mat = (color, rough = 0.9, metal = 0.0) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
 
 // ---------- Textures procédurales (légères, générées au chargement) ----------
 function makeTex(size, repeat, draw) {
@@ -128,7 +147,7 @@ const TEX = {
   }),
 };
 
-const texMat = (tex, color = 0xffffff) => new THREE.MeshLambertMaterial({ map: tex, color });
+const texMat = (tex, color = 0xffffff) => new THREE.MeshStandardMaterial({ map: tex, color, roughness: 0.95, metalness: 0.0 });
 const stoneMat = () => texMat(TEX.stone);
 const woodMat = () => texMat(TEX.wood);
 
@@ -146,43 +165,94 @@ function biomeAt(x, z) {
   return best;
 }
 function srand(seed) { return function () { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-function nearRoad(x, z) {
-  for (const r of Object.values(REALMS)) {
-    const L2 = r.base.x * r.base.x + r.base.z * r.base.z || 1;
-    let t = (x * r.base.x + z * r.base.z) / L2; t = Math.max(0, Math.min(1, t));
-    if (Math.hypot(x - r.base.x * t, z - r.base.z * t) < 16) return true;
+
+// essences d'arbres par biome (forme + couleurs)
+const TREE = {
+  alb:      { trunk: 0x6e4a2c, canopy: 0x4f7a33, shape: 'broad' },
+  hib:      { trunk: 0x5e4126, canopy: 0x356e2b, shape: 'broad' },
+  mid:      { trunk: 0x584434, canopy: 0x2f5540, shape: 'pine' },
+  frontier: { trunk: 0x6b5a44, canopy: 0x6a6a40, shape: 'pine' },
+};
+
+// Arbres droits (instanciés par essence) + rochers, posés sur le relief
+function buildTreesAndRocks() {
+  const dummy = new THREE.Object3D(); const col = new THREE.Color();
+  const trees = SCENERY.filter((s) => s.type === 'tree');
+  const rocks = SCENERY.filter((s) => s.type === 'rock');
+  const bySpec = {};
+  for (const t of trees) (bySpec[t.species || 'alb'] ||= []).push(t);
+
+  for (const sp in bySpec) {
+    const list = bySpec[sp]; const P = TREE[sp] || TREE.alb;
+    const trunkGeo = new THREE.CylinderGeometry(0.42, 0.85, 8, 8); trunkGeo.translate(0, 4, 0);
+    const trunkIM = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: P.trunk, roughness: 0.95 }), list.length);
+    let g1, g2;
+    if (P.shape === 'pine') {
+      const a = new THREE.ConeGeometry(2.7, 8, 9); a.translate(0, 9, 0);
+      const b = new THREE.ConeGeometry(1.8, 5.5, 9); b.translate(0, 13, 0);
+      g1 = a; g2 = b;
+    } else {
+      const a = new THREE.IcosahedronGeometry(3.2, 1); a.translate(0, 9.5, 0);
+      const b = new THREE.IcosahedronGeometry(2.3, 1); b.translate(1.5, 11.6, 0.5);
+      g1 = a; g2 = b;
+    }
+    const cMat = () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 });
+    const c1 = new THREE.InstancedMesh(g1, cMat(), list.length);
+    const c2 = new THREE.InstancedMesh(g2, cMat(), list.length);
+    trunkIM.castShadow = c1.castShadow = c2.castShadow = true;
+    list.forEach((t, i) => {
+      const y = terrainHeight(t.x, t.z);
+      dummy.position.set(t.x, y, t.z);
+      dummy.rotation.set(0, t.rot, 0);
+      dummy.scale.set(t.scale, t.scale * (0.9 + ((i * 17) % 5) * 0.06), t.scale);
+      dummy.updateMatrix();
+      trunkIM.setMatrixAt(i, dummy.matrix); c1.setMatrixAt(i, dummy.matrix); c2.setMatrixAt(i, dummy.matrix);
+      col.setHex(P.canopy).offsetHSL(0, (((i * 31) % 100) / 100 - 0.5) * 0.08, (((i * 97) % 100) / 100 - 0.5) * 0.12);
+      c1.setColorAt(i, col); c2.setColorAt(i, col);
+    });
+    [trunkIM, c1, c2].forEach((im) => { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; });
+    scene.add(trunkIM, c1, c2);
   }
-  return false;
+
+  // rochers (boulders) posés sur le sol
+  if (rocks.length) {
+    const rockGeo = new THREE.DodecahedronGeometry(2.0, 0);
+    const rockIM = new THREE.InstancedMesh(rockGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1.0 }), rocks.length);
+    rockIM.castShadow = true; rockIM.receiveShadow = true;
+    rocks.forEach((s, i) => {
+      const y = terrainHeight(s.x, s.z);
+      dummy.position.set(s.x, y + 0.5 * s.scale, s.z);
+      dummy.rotation.set(s.rot, s.rot * 1.7, s.rot * 0.6);
+      dummy.scale.setScalar(s.scale); dummy.updateMatrix();
+      rockIM.setMatrixAt(i, dummy.matrix);
+      col.setHSL(0.08, 0.04, 0.42 + ((i * 53) % 100) / 100 * 0.16); rockIM.setColorAt(i, col);
+    });
+    rockIM.instanceMatrix.needsUpdate = true; if (rockIM.instanceColor) rockIM.instanceColor.needsUpdate = true;
+    scene.add(rockIM);
+  }
 }
 
 // ---------- Monde low poly ----------
 function buildWorld() {
   const half = WORLD.size / 2;
-  const groundGeo = new THREE.PlaneGeometry(WORLD.size, WORLD.size, 48, 48);
+  const SEG = 110;
+  const groundGeo = new THREE.PlaneGeometry(WORLD.size, WORLD.size, SEG, SEG);
   groundGeo.rotateX(-Math.PI / 2);
   const pos = groundGeo.attributes.position;
   const COL = []; const tmpc = new THREE.Color(); const snowC = new THREE.Color(0xeef3f8);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
-    let h = Math.sin(x * 0.006) * Math.cos(z * 0.0055) * 16   // grandes collines
-          + Math.sin(x * 0.013) * Math.cos(z * 0.011) * 6     // ondulations
-          + Math.sin(x * 0.031 + z * 0.027) * 2.5;            // détail
-    const dc = Math.hypot(x, z);
-    const edge = Math.max(0, (dc - half * 0.6) / (half * 0.4)); // montagnes de bordure
-    h += edge * edge * 90;
-    let flatten = Math.min(dc, ...Object.values(REALMS).map((r) => Math.hypot(x - r.base.x, z - r.base.z)));
-    if (nearRoad(x, z)) flatten = Math.min(flatten, 12); // routes praticables
-    h *= THREE.MathUtils.clamp((flatten - 40) / 120, 0, 1);
+    const h = terrainHeight(x, z); // relief partagé avec le serveur
     pos.setY(i, h);
     const b = BIOME[biomeAt(x, z)];
     tmpc.setHex(b.ground);
-    if (b.snow) tmpc.lerp(snowC, 0.5);
-    if (h > 40) tmpc.lerp(snowC, Math.min(0.85, (h - 40) / 45)); // sommets enneigés
+    if (b.snow) tmpc.lerp(snowC, 0.45);
+    if (h > 34) tmpc.lerp(snowC, Math.min(0.9, (h - 34) / 40)); // sommets enneigés
     COL.push(tmpc.r, tmpc.g, tmpc.b);
   }
   groundGeo.setAttribute('color', new THREE.Float32BufferAttribute(COL, 3));
   groundGeo.computeVertexNormals();
-  const ground = new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ map: TEX.grass, vertexColors: true }));
+  const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ map: TEX.grass, vertexColors: true, roughness: 1.0, metalness: 0.0 }));
   ground.receiveShadow = true;
   scene.add(ground);
 
@@ -221,29 +291,8 @@ function buildWorld() {
     scene.add(disc);
   }
 
-  // arbres / rochers — positions partagées avec le serveur (collisions)
-  const treeGeo = new THREE.ConeGeometry(3.4, 10, 6);
-  const trunkGeo = new THREE.CylinderGeometry(0.7, 0.9, 3.5, 5);
-  const rockGeo = new THREE.DodecahedronGeometry(2.2, 0);
-  for (const s of SCENERY) {
-    if (s.type === 'tree') {
-      const g = new THREE.Group();
-      const trunk = new THREE.Mesh(trunkGeo, woodMat());
-      trunk.position.y = 1.7;
-      const top = new THREE.Mesh(treeGeo, mat(s.z < -520 ? 0x4a6f6f : 0x2f6b33));
-      top.position.y = 8; top.castShadow = true;
-      g.add(trunk, top);
-      g.position.set(s.x, 0, s.z);
-      g.rotation.y = s.rot;
-      scene.add(g);
-    } else {
-      const rock = new THREE.Mesh(rockGeo, stoneMat());
-      rock.position.set(s.x, 1.2, s.z);
-      rock.rotation.set(s.rot, s.rot * 1.7, s.rot * 0.6);
-      rock.castShadow = true;
-      scene.add(rock);
-    }
-  }
+  // arbres droits regroupés en forêts + rochers (positions partagées = collisions)
+  buildTreesAndRocks();
 
   for (const r of Object.values(REALMS)) buildCapital(r);
   buildFort();
@@ -261,72 +310,55 @@ function buildWorld() {
   buildScenery(half);
 }
 
-// Décor instancié non-bloquant : herbe, fleurs, buissons, sapins (par biome)
+// Sous-bois instancié non-bloquant : herbe, fleurs, buissons (posés sur le relief)
 function buildScenery(half) {
   const rnd = srand(13371);
   const dummy = new THREE.Object3D(); const col = new THREE.Color();
   const ok = (x, z) => Math.abs(x) < half * 0.95 && Math.abs(z) < half * 0.95 &&
     Math.hypot(x, z) > FRONTIER.fortRadius + 28 &&
-    !Object.values(REALMS).some((r) => Math.hypot(x - r.base.x, z - r.base.z) < 68);
+    terrainHeight(x, z) < 26 &&
+    !Object.values(REALMS).some((r) => Math.hypot(x - r.base.x, z - r.base.z) < 60);
+  const SMAT = (extra) => new THREE.MeshStandardMaterial(Object.assign({ color: 0xffffff, roughness: 0.9 }, extra || {}));
 
   // --- herbe ---
-  const blade = new THREE.ConeGeometry(0.14, 1.0, 4); blade.translate(0, 0.5, 0);
-  const GN = 4200; const grass = new THREE.InstancedMesh(blade, new THREE.MeshLambertMaterial({}), GN);
+  const blade = new THREE.ConeGeometry(0.13, 1.1, 4); blade.translate(0, 0.55, 0);
+  const GN = 4600; const grass = new THREE.InstancedMesh(blade, SMAT(), GN);
   let gi = 0;
   for (let i = 0; i < GN * 3 && gi < GN; i++) {
     const x = (rnd() - 0.5) * WORLD.size * 0.95, z = (rnd() - 0.5) * WORLD.size * 0.95;
     if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
     if (rnd() > b.density * 0.55) continue;
-    dummy.position.set(x, 0, z); dummy.rotation.y = rnd() * 6.28;
+    dummy.position.set(x, terrainHeight(x, z), z); dummy.rotation.y = rnd() * 6.28;
     const s = 0.6 + rnd() * 1.3; dummy.scale.set(s, s * (0.7 + rnd()), s); dummy.updateMatrix();
     grass.setMatrixAt(gi, dummy.matrix); col.setHex(b.grassCol).offsetHSL(0, 0, (rnd() - 0.5) * 0.12); grass.setColorAt(gi, col); gi++;
   }
-  grass.count = gi; grass.instanceMatrix.needsUpdate = true; if (grass.instanceColor) grass.instanceColor.needsUpdate = true; grass.castShadow = false; scene.add(grass);
+  grass.count = gi; grass.instanceMatrix.needsUpdate = true; if (grass.instanceColor) grass.instanceColor.needsUpdate = true; scene.add(grass);
 
   // --- fleurs ---
   const bloom = new THREE.IcosahedronGeometry(0.26, 0); bloom.translate(0, 0.55, 0);
-  const FN = 1100; const flowers = new THREE.InstancedMesh(bloom, new THREE.MeshLambertMaterial({}), FN);
+  const FN = 1300; const flowers = new THREE.InstancedMesh(bloom, SMAT(), FN);
   let fi = 0;
   for (let i = 0; i < FN * 4 && fi < FN; i++) {
     const x = (rnd() - 0.5) * WORLD.size * 0.95, z = (rnd() - 0.5) * WORLD.size * 0.95;
     if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
     if (!b.flowers.length || rnd() > b.density * 0.4) continue;
-    dummy.position.set(x, 0, z); dummy.rotation.y = rnd() * 6.28; const s = 0.7 + rnd() * 0.7; dummy.scale.setScalar(s); dummy.updateMatrix();
+    dummy.position.set(x, terrainHeight(x, z), z); dummy.rotation.y = rnd() * 6.28; const s = 0.7 + rnd() * 0.8; dummy.scale.setScalar(s); dummy.updateMatrix();
     flowers.setMatrixAt(fi, dummy.matrix); col.setHex(b.flowers[(rnd() * b.flowers.length) | 0]); flowers.setColorAt(fi, col); fi++;
   }
   flowers.count = fi; flowers.instanceMatrix.needsUpdate = true; if (flowers.instanceColor) flowers.instanceColor.needsUpdate = true; scene.add(flowers);
 
   // --- buissons ---
-  const bushG = new THREE.IcosahedronGeometry(1.2, 0); const BN = 600;
-  const bushes = new THREE.InstancedMesh(bushG, new THREE.MeshLambertMaterial({ flatShading: true }), BN);
+  const bushG = new THREE.IcosahedronGeometry(1.15, 1); const BN = 700;
+  const bushes = new THREE.InstancedMesh(bushG, SMAT({ roughness: 0.85 }), BN);
   let bi = 0;
   for (let i = 0; i < BN * 4 && bi < BN; i++) {
     const x = (rnd() - 0.5) * WORLD.size * 0.92, z = (rnd() - 0.5) * WORLD.size * 0.92;
     if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
     if (rnd() > b.density * 0.3) continue;
-    dummy.position.set(x, 0.8 + rnd() * 0.4, z); dummy.rotation.set(rnd(), rnd() * 6.28, rnd()); const s = 0.7 + rnd() * 1.1; dummy.scale.setScalar(s); dummy.updateMatrix();
+    dummy.position.set(x, terrainHeight(x, z) + 0.7 + rnd() * 0.4, z); dummy.rotation.set(rnd(), rnd() * 6.28, rnd()); const s = 0.7 + rnd() * 1.0; dummy.scale.setScalar(s); dummy.updateMatrix();
     bushes.setMatrixAt(bi, dummy.matrix); col.setHex(b.foliage).offsetHSL(0, 0, (rnd() - 0.5) * 0.08); bushes.setColorAt(bi, col); bi++;
   }
   bushes.count = bi; bushes.instanceMatrix.needsUpdate = true; if (bushes.instanceColor) bushes.instanceColor.needsUpdate = true; bushes.castShadow = true; scene.add(bushes);
-
-  // --- sapins/arbres d'ambiance (tronc + frondaison instanciés) ---
-  const TN = 900;
-  const trunkG = new THREE.CylinderGeometry(0.5, 0.7, 4, 5); trunkG.translate(0, 2, 0);
-  const folG = new THREE.ConeGeometry(2.6, 8, 6); folG.translate(0, 8, 0);
-  const trunks = new THREE.InstancedMesh(trunkG, new THREE.MeshLambertMaterial({ color: 0x6b4a2e }), TN);
-  const fols = new THREE.InstancedMesh(folG, new THREE.MeshLambertMaterial({}), TN);
-  let ti = 0;
-  for (let i = 0; i < TN * 5 && ti < TN; i++) {
-    const x = (rnd() - 0.5) * WORLD.size * 0.92, z = (rnd() - 0.5) * WORLD.size * 0.92;
-    if (!ok(x, z)) continue; const b = BIOME[biomeAt(x, z)];
-    if (rnd() > b.pines * 0.5) continue;
-    dummy.position.set(x, 0, z); dummy.rotation.y = rnd() * 6.28; const s = 0.8 + rnd() * 0.9; dummy.scale.set(s, s * (0.9 + rnd() * 0.5), s); dummy.updateMatrix();
-    trunks.setMatrixAt(ti, dummy.matrix); fols.setMatrixAt(ti, dummy.matrix);
-    col.setHex(b.foliage).offsetHSL(0, 0, (rnd() - 0.5) * 0.06); fols.setColorAt(ti, col);
-    if (b.snow && rnd() < 0.5) fols.setColorAt(ti, col.lerp(new THREE.Color(0xeef3f8), 0.4));
-    ti++;
-  }
-  trunks.count = ti; fols.count = ti; trunks.instanceMatrix.needsUpdate = true; fols.instanceMatrix.needsUpdate = true; if (fols.instanceColor) fols.instanceColor.needsUpdate = true; fols.castShadow = true; scene.add(trunks, fols);
 }
 
 function buildCapital(r) {
@@ -668,119 +700,129 @@ function makeLabel(text, color, hpPct) {
 }
 
 const KIND_COLORS = { mob: 0x8a6a4a, npc: 0xd8c060 };
+const MOB_COLORS = {
+  bandit: 0x8a5a3a, boar: 0x5f4530, undead: 0xcfd6cf, giant: 0x9a8a6a,
+  sprite: 0x86d98a, wolf: 0x6a6a72, fomor: 0x7d8a58, treant: 0x55683a,
+  rat: 0x7a6a5a, svartalf: 0x564f6a, draugr: 0x8a9a78, jotun: 0xaccadf,
+  outlaw: 0x7a5a46, drake: 0x6a3a3a, wraith: 0x6a6a8a,
+};
+const HUMANOID_MOBS = new Set(['bandit', 'undead', 'sprite', 'fomor', 'svartalf', 'draugr', 'outlaw', 'wraith', 'giant', 'jotun', 'treant']);
+const shade = (hex, amt) => { const c = new THREE.Color(hex); c.offsetHSL(0, 0, amt); return c.getHex(); };
 
-// géométrie de membre avec pivot en haut (pour un balancement naturel)
+// membre arrondi (cylindre + articulation), pivot en haut pour le balancement
 function limb(w, h, d, color) {
-  const geo = new THREE.BoxGeometry(w, h, d);
-  geo.translate(0, -h / 2, 0);
-  return new THREE.Mesh(geo, mat(color));
+  const g = new THREE.Group();
+  const r = Math.min(w, d) * 0.5;
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.82, r, h, 10), mat(color, 0.8));
+  cyl.geometry.translate(0, -h / 2, 0); cyl.castShadow = true;
+  const joint = new THREE.Mesh(new THREE.SphereGeometry(r * 1.02, 10, 8), mat(color, 0.8));
+  joint.position.y = -h; joint.castShadow = true;
+  g.add(cyl, joint);
+  return g;
+}
+
+function makeWeapon(robe, realmColor) {
+  const g = new THREE.Group();
+  if (robe) {
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 3.4, 8), mat(0x6b4a2c, 0.7));
+    staff.geometry.translate(0, 1.0, 0); staff.castShadow = true;
+    const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 1),
+      new THREE.MeshStandardMaterial({ color: realmColor || 0x9fd0ff, emissive: realmColor || 0x4a90d0, emissiveIntensity: 0.6, roughness: 0.35 }));
+    orb.position.y = 2.7;
+    g.add(staff, orb);
+  } else {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.9, 0.05), mat(0xd6dae6, 0.3, 0.6));
+    blade.geometry.translate(0, 1.05, 0); blade.castShadow = true;
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.13, 0.16), mat(0x7a6326, 0.5, 0.4));
+    guard.position.y = 0.18;
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.42, 8), mat(0x2a2018, 0.85));
+    g.add(blade, guard, grip);
+  }
+  return g;
+}
+
+// silhouette humanoïde proportionnée et lissée
+function buildHumanoid(g, anim, o) {
+  const skinMat = () => mat(o.skin, 0.72);
+  const clothMat = () => mat(o.cloth, 0.85);
+  const bw = o.bw;
+  // jambes
+  for (const s of [-1, 1]) {
+    const leg = limb(0.46 * bw, 1.6, 0.46 * bw, o.robe ? o.cloth : 0x33363f);
+    leg.position.set(s * 0.34 * bw, 1.6, 0); anim.legs.push(leg); g.add(leg);
+  }
+  // bassin / torse / épaules
+  const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.62 * bw, 0.72 * bw, 0.7, 12), clothMat()); pelvis.position.y = 1.7; pelvis.castShadow = true; g.add(pelvis);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.86 * bw, 0.6 * bw, 1.7, 12), clothMat()); torso.position.y = 2.7; torso.castShadow = true; g.add(torso);
+  anim.body = torso; anim.bodyY = 2.7;
+  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.95 * bw, 14, 10), clothMat()); shoulders.scale.set(1, 0.55, 0.8); shoulders.position.y = 3.45; shoulders.castShadow = true; g.add(shoulders);
+  if (o.robe) { const skirt = new THREE.Mesh(new THREE.ConeGeometry(1.3 * bw, 2.6, 16), clothMat()); skirt.position.y = 1.3; skirt.castShadow = true; g.add(skirt); }
+  // cou + tête
+  const HY = 4.15;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.4, 10), skinMat()); neck.position.y = 3.75; g.add(neck);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.62 * (0.92 + bw * 0.08), 18, 14), skinMat());
+  head.scale.set(1, 1.12, 1.02); head.position.y = HY; head.castShadow = true; g.add(head);
+  for (const sx of [-0.2, 0.2]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), mat(0x1b1d24, 0.4)); eye.position.set(sx, HY + 0.05, 0.54); g.add(eye); }
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.66 * (0.92 + bw * 0.08), 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), mat(o.hair != null ? o.hair : 0x3a2b1d, 0.9));
+  hair.position.y = HY + 0.05; g.add(hair);
+  if (o.tr) {
+    if (o.tr.ears === 'pointy') for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.55, 6), skinMat()); ear.position.set(s * 0.6, HY + 0.16, 0); ear.rotation.z = s * -0.5; g.add(ear); }
+    if (o.tr.beard) { const beard = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.85, 10), mat(o.hair != null ? o.hair : 0x6b5034, 0.9)); beard.position.set(0, HY - 0.5, 0.34); beard.rotation.x = Math.PI; g.add(beard); }
+    if (o.tr.tusks) for (const s of [-1, 1]) { const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.38, 6), mat(0xeae0c8, 0.5)); tusk.position.set(s * 0.18, HY - 0.32, 0.48); g.add(tusk); }
+  }
+  // bras
+  for (const s of [-1, 1]) { const arm = limb(0.4 * bw, 1.5, 0.4 * bw, o.skin); arm.position.set(s * (0.92 * bw + 0.05), 3.4, 0); anim.arms.push(arm); g.add(arm); }
+  // arme (main droite)
+  if (o.weapon) { const w = makeWeapon(o.robe, o.realmColor); w.position.set(0.92 * bw + 0.05, 1.95, 0.15); anim.weapon = w; g.add(w); }
+  if (o.npc) {
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 8, 18), new THREE.MeshStandardMaterial({ color: 0xf0d889, emissive: 0xf0d889, emissiveIntensity: 0.5, roughness: 0.4 }));
+    halo.rotation.x = Math.PI / 2; halo.position.y = HY + 0.75; g.add(halo);
+  }
+}
+
+// créature quadrupède organique
+function buildBeast(g, anim, color) {
+  const fur = () => mat(color, 0.92);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), fur()); body.scale.set(1.0, 0.85, 1.7); body.position.y = 1.7; body.castShadow = true; g.add(body);
+  anim.body = body; anim.bodyY = 1.7;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 1.0, 10), fur()); neck.position.set(0, 2.1, 1.7); neck.rotation.x = 0.7; g.add(neck);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.8, 14, 12), fur()); head.scale.set(1, 0.92, 1.1); head.position.set(0, 2.45, 2.4); head.castShadow = true; g.add(head);
+  const snout = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.9, 10), fur()); snout.rotation.x = Math.PI / 2; snout.position.set(0, 2.35, 3.1); g.add(snout);
+  for (const sx of [-0.3, 0.3]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshStandardMaterial({ color: 0xc02020, emissive: 0x801010, emissiveIntensity: 0.5, roughness: 0.4 })); eye.position.set(sx, 2.62, 3.0); g.add(eye); }
+  for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.5, 6), fur()); ear.position.set(s * 0.4, 3.0, 2.3); ear.rotation.z = s * 0.3; g.add(ear); }
+  for (const [lx, lz] of [[-0.8, 1.0], [0.8, 1.0], [-0.8, -1.0], [0.8, -1.0]]) { const leg = limb(0.46, 1.6, 0.46, shade(color, -0.08)); leg.position.set(lx, 1.6, lz); anim.legs.push(leg); g.add(leg); }
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.26, 1.5, 8), fur()); tail.position.set(0, 1.95, -1.85); tail.rotation.x = -0.8; g.add(tail);
 }
 
 function makeBody(kind, realm, cls, race) {
   const g = new THREE.Group();
-  let color = realm ? REALMS[realm].color : (KIND_COLORS[kind] || 0x999999);
-  let scale = 1;
-  if (kind === 'mob') scale = 1.1;
-  if (kind === 'guard') scale = 1.15;
   const anim = { phase: Math.random() * 6, swing: 0, arms: [], legs: [], weapon: null, body: null, bodyY: 0, prev: null };
 
   if (kind === 'mob') {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.6, 3.6), mat(color));
-    body.position.y = 1.3; body.castShadow = true;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 1.4), mat(color));
-    head.position.set(0, 2.1, 2.1);
-    g.add(body, head);
-    anim.body = body; anim.bodyY = 1.3;
-    for (const [lx, lz] of [[-0.9, 1.2], [0.9, 1.2], [-0.9, -1.2], [0.9, -1.2]]) {
-      const leg = limb(0.5, 1.2, 0.5, 0x5a4630);
-      leg.position.set(lx, 1.2, lz);
-      anim.legs.push(leg);
-      g.add(leg);
+    const type = cls || '';
+    const color = MOB_COLORS[type] || KIND_COLORS.mob;
+    if (HUMANOID_MOBS.has(type)) {
+      buildHumanoid(g, anim, { skin: color, cloth: shade(color, -0.18), bw: 1.12, robe: false,
+        tr: { tusks: ['fomor', 'jotun', 'giant'].includes(type), ears: ['sprite', 'svartalf'].includes(type) ? 'pointy' : null }, weapon: false, hair: 0x241f18 });
+      const big = ['fomor', 'giant', 'jotun', 'treant'].includes(type) ? 1.55 : type === 'sprite' ? 0.72 : 1.05;
+      g.scale.setScalar(big);
+    } else {
+      buildBeast(g, anim, color);
+      g.scale.setScalar(['drake', 'jotun', 'giant'].includes(type) ? 1.45 : type === 'rat' ? 0.7 : 1.05);
     }
-  } else {
-    const arch = cls ? classById(cls)?.arch : null;
-    const robe = ['caster', 'healer', 'support'].includes(arch);
-    const tr = race ? raceTraits(race) : { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
-    const skin = tr.skin;
-    const bw = tr.build === 'stocky' ? 1.18 : tr.build === 'slim' ? 0.82 : 1; // largeur du buste selon la carrure
-
-    // torse (robe pour les lanceurs, cuirasse sinon), teinté par la classe/le royaume
-    const body = new THREE.Mesh(
-      robe ? new THREE.ConeGeometry(1.2 * bw, 2.6, 7) : new THREE.BoxGeometry(1.6 * bw, 2.2, 0.95 * bw),
-      mat(color)
-    );
-    body.position.y = robe ? 1.3 : 1.9; body.castShadow = true;
-    anim.body = body; anim.bodyY = body.position.y;
-    g.add(body);
-    // ceinture / col pour casser la silhouette
-    const belt = new THREE.Mesh(new THREE.BoxGeometry((robe ? 1.9 : 1.7) * bw, 0.35, (robe ? 1.9 : 1.0) * bw), mat(0x2a2d38));
-    belt.position.y = robe ? 1.0 : 1.0; g.add(belt);
-
-    // tête + cou, couleur de peau de la race
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.5, 6), mat(skin));
-    neck.position.y = 3.0; g.add(neck);
-    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.66 * (0.9 + bw * 0.1), 0), mat(skin));
-    head.position.y = 3.5; g.add(head);
-    // yeux (petits points sombres)
-    for (const sx of [-0.22, 0.22]) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), mat(0x20232c));
-      eye.position.set(sx, 3.55, 0.55); g.add(eye);
-    }
-    // cheveux / calotte
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.7 * (0.9 + bw * 0.1), 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x3a2b1d));
-    hair.position.y = 3.62; g.add(hair);
-
-    // traits de race : oreilles, barbe, défenses
-    if (tr.ears === 'pointy') {
-      for (const s of [-1, 1]) {
-        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.6, 4), mat(skin));
-        ear.position.set(s * 0.62, 3.7, 0); ear.rotation.z = s * -0.5; g.add(ear);
-      }
-    }
-    if (tr.beard) {
-      const beard = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 6), mat(0x6b5034));
-      beard.position.set(0, 3.05, 0.42); beard.rotation.x = Math.PI; g.add(beard);
-    }
-    if (tr.tusks) {
-      for (const s of [-1, 1]) {
-        const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.4, 5), mat(0xeae0c8));
-        tusk.position.set(s * 0.2, 3.2, 0.5); g.add(tusk);
-      }
-    }
-
-    // bras (peau) + mains, et jambes
-    for (const s of [-1, 1]) {
-      const arm = limb(0.42 * bw, 1.7, 0.42 * bw, skin);
-      arm.position.set(s * (1.0 * bw + 0.15), 2.7, 0);
-      anim.arms.push(arm); g.add(arm);
-      const leg = limb(0.5 * bw, 1.5, 0.5 * bw, 0x33363f);
-      leg.position.set(s * 0.42 * bw, 1.4, 0);
-      anim.legs.push(leg); g.add(leg);
-    }
-
-    // arme tenue en main
-    const wgeo = robe ? new THREE.CylinderGeometry(0.12, 0.12, 3.4, 5) : new THREE.BoxGeometry(0.22, 2.0, 0.22);
-    if (!robe) wgeo.translate(0, 0.8, 0);
-    const weapon = new THREE.Mesh(wgeo, mat(robe ? 0x8a6a3a : 0xc8ccd8));
-    weapon.position.set(1.25 * bw + 0.2, robe ? 2.0 : 1.6, 0.2);
-    anim.weapon = weapon; g.add(weapon);
-    if (robe) { // pommeau lumineux pour les bâtons
-      const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.3, 0), mat(realm ? REALMS[realm].color : 0x9fd0ff));
-      orb.position.set(weapon.position.x, 3.7, 0.2); g.add(orb);
-    }
-
-    if (kind === 'npc') {
-      const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 6, 12), mat(0xf0d889));
-      halo.rotation.x = Math.PI / 2; halo.position.y = 4.4;
-      g.add(halo);
-    }
-    // applique la stature de la race (hauteur et largeur)
-    scale *= 1;
-    g.scale.set(scale * tr.w, scale * tr.h, scale * tr.w);
     g.userData.anim = anim;
     return g;
   }
-  g.scale.setScalar(scale);
+
+  // joueur / PNJ / IA : humanoïde réaliste selon race + classe
+  const arch = cls ? classById(cls)?.arch : null;
+  const robe = ['caster', 'healer', 'support'].includes(arch);
+  const tr = race ? raceTraits(race) : { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
+  const bw = tr.build === 'stocky' ? 1.18 : tr.build === 'slim' ? 0.84 : 1;
+  const cloth = realm ? REALMS[realm].color : (KIND_COLORS[kind] || 0x8899aa);
+  buildHumanoid(g, anim, { skin: tr.skin, cloth, bw, robe, tr,
+    realmColor: realm ? REALMS[realm].color : 0x9fd0ff, weapon: true, npc: kind === 'npc' });
+  g.scale.set(tr.w, tr.h, tr.w);
   g.userData.anim = anim;
   return g;
 }
@@ -838,7 +880,7 @@ function syncEntities(list, myRealm) {
       scene.add(mesh);
       e = { mesh, data: {}, label: null, labelKey: '' };
       entities.set(id, e);
-      mesh.position.set(x, 0, z);
+      mesh.position.set(x, terrainHeight(x, z), z);
     }
     // impact visuel quand l'entité perd de la vie
     if (e.data.hpPct !== undefined && hpPct < e.data.hpPct - 1 && !dead) {
@@ -870,7 +912,7 @@ function initSelf(create) {
   scene.add(myMesh);
   const base = REALMS[create.realm].base;
   me.x = base.x; me.z = base.z;
-  myMesh.position.set(me.x, 0, me.z);
+  myMesh.position.set(me.x, terrainHeight(me.x, me.z), me.z);
 }
 
 // ---------- Caméra & contrôles ----------
@@ -980,7 +1022,7 @@ net.on(MSG.WELCOME, (m) => {
   // place le personnage à sa position réelle (restaurée le cas échéant)
   if (m.spawn && myMesh) {
     me.x = m.spawn.x; me.z = m.spawn.z;
-    myMesh.position.set(me.x, 0, me.z);
+    myMesh.position.set(me.x, terrainHeight(me.x, me.z), me.z);
   }
 });
 net.on(MSG.SELF, (m) => {
@@ -1042,8 +1084,11 @@ function animate() {
       if (fwd || strafe) {
         const speed = me.stealthed ? 8 : 16;
         const ang = camYaw + Math.atan2(strafe, fwd);
+        const ox = me.x, oz = me.z;
         me.x += Math.sin(ang) * speed * dt;
         me.z += Math.cos(ang) * speed * dt;
+        // terrain non praticable (montagnes/pentes) : on annule le pas
+        if (!walkable(me.x, me.z)) { me.x = ox; me.z = oz; }
         // prédiction des collisions (le serveur reste autoritaire)
         let cpos = resolveMove(me.x, me.z, 1.0);
         const others = [];
@@ -1066,7 +1111,7 @@ function animate() {
       jumpY += jumpV * dt; jumpV -= 40 * dt;
       if (jumpY <= 0) { jumpY = 0; jumpV = 0; }
     }
-    myMesh.position.set(me.x, jumpY, me.z);
+    myMesh.position.set(me.x, terrainHeight(me.x, me.z) + jumpY, me.z);
     myMesh.visible = !me.dead;
     myMesh.traverse((o) => { if (o.material && !o.material.map) { o.material.transparent = me.stealthed; o.material.opacity = me.stealthed ? 0.35 : 1; } });
 
@@ -1081,6 +1126,7 @@ function animate() {
       const px = p.x, pz = p.z;
       p.x += (ent.tx - p.x) * Math.min(1, dt * 8);
       p.z += (ent.tz - p.z) * Math.min(1, dt * 8);
+      p.y = terrainHeight(p.x, p.z);
       ent.mesh.rotation.y += (ent.try - ent.mesh.rotation.y) * Math.min(1, dt * 8);
       const spd = Math.hypot(p.x - px, p.z - pz) / Math.max(dt, 0.001);
       animateBody(ent.mesh, spd, dt, elapsed);
@@ -1090,13 +1136,14 @@ function animate() {
     fxUpdate(dt);
 
     // caméra orbitale
+    const ph = terrainHeight(me.x, me.z);
     const cx = me.x + Math.sin(camYaw) * -camDist * Math.cos(camPitch);
     const cz = me.z + Math.cos(camYaw) * -camDist * Math.cos(camPitch);
-    const cy = 3 + Math.sin(camPitch) * camDist;
+    const cy = ph + 3 + Math.sin(camPitch) * camDist;
     camera.position.set(cx, cy, cz);
-    camera.lookAt(me.x, 4, me.z);
-    sun.position.set(me.x + 120, 220, me.z + 80);
-    sun.target.position.set(me.x, 0, me.z);
+    camera.lookAt(me.x, ph + 4, me.z);
+    sun.position.set(me.x + 150, ph + 320, me.z + 110);
+    sun.target.position.set(me.x, ph, me.z);
     sun.target.updateMatrixWorld();
   }
 

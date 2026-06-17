@@ -7,6 +7,7 @@ import {
   skillCost, EQUIP_SLOTS, weightOfArch, genItem, gearBonus, RARITIES,
 } from '../shared/data.js';
 import { resolveMove, pushApart, entityRadius, capitalTransform } from '../shared/collision.js';
+import { walkable } from '../shared/terrain.js';
 
 let NEXT_ID = 1;
 const uid = () => 'e' + (NEXT_ID++);
@@ -304,7 +305,7 @@ export class Game {
         if (p.dead || this.hasEffect(p, 'root') || this.hasEffect(p, 'stun') || this.hasEffect(p, 'mez')) break;
         const nx = clamp(m.x, -HALF, HALF), nz = clamp(m.z, -HALF, HALF);
         const d = Math.hypot(nx - p.x, nz - p.z);
-        if (d < 30) { // anti-téléportation grossier
+        if (d < 30 && walkable(nx, nz)) { // anti-téléportation + terrain praticable (pas de montagnes)
           if (d > 0.5 && p.stealthed === false) p.lastMove = now();
           const c = this.applyCollisions(p, nx, nz);
           p.x = c.x; p.z = c.z; p.ry = m.ry || 0;
