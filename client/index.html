@@ -15,9 +15,26 @@
          indiquez l'URL de votre serveur déployé sur Render, par ex :
          server: "wss://realms-at-war.onrender.com"
        =================================================================== -->
-  <script>window.RAW_CONFIG = { server: "" };</script>
+  <!-- Pour activer la connexion Google (SSO) : créez un ID client OAuth
+       (console.cloud.google.com) et collez-le ci-dessous. Laissez "" pour
+       n'utiliser que le mode invité. Voir COMPTES.md. -->
+  <!-- useDemoModels:true => personnages 3D animés "RobotExpressive" (CC0)
+       chargés depuis un CDN, sans rien à héberger. Voir MODELES.md. -->
+  <script>window.RAW_CONFIG = { server: "", googleClientId: "", useDemoModels: false };</script>
 </head>
 <body>
+  <!-- ===== Connexion (multijoueur) ===== -->
+  <div id="login" class="hidden">
+    <div class="cc-panel cs-panel" style="max-width:460px;text-align:center">
+      <h1>⚔ Realms at War</h1>
+      <p class="cc-sub">Connectez-vous pour retrouver vos personnages sur tous vos appareils.<br/>
+        <em>Projet fan inspiré de Dark Age of Camelot — non commercial.</em></p>
+      <div id="login-google" style="display:none;justify-content:center;margin:16px 0"></div>
+      <button id="login-guest" class="cs-newbtn">Jouer en invité</button>
+      <p id="login-note" class="cc-sub" style="font-size:11px;margin-top:14px;color:#707890"></p>
+    </div>
+  </div>
+
   <!-- ===== Sélection de personnage ===== -->
   <div id="charselect" class="hidden">
     <div class="cc-panel cs-panel">

@@ -6,9 +6,11 @@ import * as THREE from 'three';
 import { Net } from './net.js';
 import { UI } from './ui.js';
 import { charCreate } from './charcreate.js';
-import { charSelect, Roster } from './charselect.js';
+import { charSelect, charSelectServer, Roster } from './charselect.js';
+import { guestId, mountGoogle } from './auth.js';
 import { Sound } from './sound.js';
 import { setupMovableUI, resetUI } from './uikit.js';
+import { tryLoadModel, updateModelMixers, updateModelAnim, playModelAction } from './models.js';
 import { REALMS, WORLD, FRONTIER, MSG, classById, ARCHETYPES, raceTraits } from '/shared/data.js';
 import { SCENERY, resolveMove, pushApart, entityRadius } from '/shared/collision.js';
 import { terrainHeight, walkable } from '/shared/terrain.js';
@@ -593,6 +595,7 @@ function castFx(slot) {
   const tgt = targetId ? entities.get(targetId) : null;
   const selfPos = { x: me.x, z: me.z };
   const realmColor = REALMS[cls.realm].color;
+  if (['spell', 'dot', 'aoe', 'heal', 'groupheal', 'hot', 'buff', 'mez', 'root'].includes(sk.t)) startCast(myMesh);
   switch (sk.t) {
     case 'melee': case 'stun':
       startSwing(myMesh);
@@ -742,45 +745,63 @@ function makeWeapon(robe, realmColor) {
 }
 
 // silhouette humanoïde proportionnée et lissée
-function buildHumanoid(g, anim, o) {
-  const skinMat = () => mat(o.skin, 0.72);
-  const clothMat = () => mat(o.cloth, 0.85);
-  const bw = o.bw;
-  // jambes
-  for (const s of [-1, 1]) {
-    const leg = limb(0.46 * bw, 1.6, 0.46 * bw, o.robe ? o.cloth : 0x33363f);
-    leg.position.set(s * 0.34 * bw, 1.6, 0); anim.legs.push(leg); g.add(leg);
-  }
-  // bassin / torse / épaules
-  const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.62 * bw, 0.72 * bw, 0.7, 12), clothMat()); pelvis.position.y = 1.7; pelvis.castShadow = true; g.add(pelvis);
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.86 * bw, 0.6 * bw, 1.7, 12), clothMat()); torso.position.y = 2.7; torso.castShadow = true; g.add(torso);
-  anim.body = torso; anim.bodyY = 2.7;
-  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.95 * bw, 14, 10), clothMat()); shoulders.scale.set(1, 0.55, 0.8); shoulders.position.y = 3.45; shoulders.castShadow = true; g.add(shoulders);
-  if (o.robe) { const skirt = new THREE.Mesh(new THREE.ConeGeometry(1.3 * bw, 2.6, 16), clothMat()); skirt.position.y = 1.3; skirt.castShadow = true; g.add(skirt); }
-  // cou + tête
-  const HY = 4.15;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.4, 10), skinMat()); neck.position.y = 3.75; g.add(neck);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.62 * (0.92 + bw * 0.08), 18, 14), skinMat());
-  head.scale.set(1, 1.12, 1.02); head.position.y = HY; head.castShadow = true; g.add(head);
-  for (const sx of [-0.2, 0.2]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), mat(0x1b1d24, 0.4)); eye.position.set(sx, HY + 0.05, 0.54); g.add(eye); }
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.66 * (0.92 + bw * 0.08), 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), mat(o.hair != null ? o.hair : 0x3a2b1d, 0.9));
-  hair.position.y = HY + 0.05; g.add(hair);
-  if (o.tr) {
-    if (o.tr.ears === 'pointy') for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.55, 6), skinMat()); ear.position.set(s * 0.6, HY + 0.16, 0); ear.rotation.z = s * -0.5; g.add(ear); }
-    if (o.tr.beard) { const beard = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.85, 10), mat(o.hair != null ? o.hair : 0x6b5034, 0.9)); beard.position.set(0, HY - 0.5, 0.34); beard.rotation.x = Math.PI; g.add(beard); }
-    if (o.tr.tusks) for (const s of [-1, 1]) { const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.38, 6), mat(0xeae0c8, 0.5)); tusk.position.set(s * 0.18, HY - 0.32, 0.48); g.add(tusk); }
-  }
-  // bras
-  for (const s of [-1, 1]) { const arm = limb(0.4 * bw, 1.5, 0.4 * bw, o.skin); arm.position.set(s * (0.92 * bw + 0.05), 3.4, 0); anim.arms.push(arm); g.add(arm); }
-  // arme (main droite)
-  if (o.weapon) { const w = makeWeapon(o.robe, o.realmColor); w.position.set(0.92 * bw + 0.05, 1.95, 0.15); anim.weapon = w; g.add(w); }
-  if (o.npc) {
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 8, 18), new THREE.MeshStandardMaterial({ color: 0xf0d889, emissive: 0xf0d889, emissiveIntensity: 0.5, roughness: 0.4 }));
-    halo.rotation.x = Math.PI / 2; halo.position.y = HY + 0.75; g.add(halo);
-  }
+// segment de membre rattaché à un os (Object3D), pivot au sommet
+function boneSeg(parent, lx, ly, lz, len, rTop, rBot, color, rough) {
+  const bone = new THREE.Object3D(); bone.position.set(lx, ly, lz); parent.add(bone);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, len, 10), mat(color, rough == null ? 0.8 : rough));
+  m.geometry.translate(0, -len / 2, 0); m.castShadow = true; bone.add(m);
+  const j = new THREE.Mesh(new THREE.SphereGeometry(rBot * 1.02, 10, 8), mat(color, 0.8));
+  j.position.y = -len; j.castShadow = true; bone.add(j);
+  return bone;
 }
 
-// créature quadrupède organique
+// Humanoide RIGGE (squelette d'os hierarchique) - animations modernes par machine a etats.
+// Sert de placeholder ; un vrai modele glTF peut le remplacer (voir client/js/models.js).
+function buildHumanoid(g, anim, o) {
+  const bw = o.bw, skin = o.skin, cloth = o.cloth, legCol = o.robe ? cloth : 0x33363f;
+  anim.rig = true; anim.phase = Math.random() * 6; anim.swing = 0; anim.cast = 0; anim.hit = 0; anim.deadT = 0;
+  const B = {}; anim.bones = B;
+
+  const pelvis = new THREE.Object3D(); pelvis.position.set(0, 2.0, 0); g.add(pelvis); B.pelvis = pelvis; anim.pelY = 2.0;
+  const pelMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.6 * bw, 0.72 * bw, 0.62, 12), mat(cloth, 0.85)); pelMesh.position.y = -0.12; pelMesh.castShadow = true; pelvis.add(pelMesh);
+  if (o.robe) { const skirt = new THREE.Mesh(new THREE.ConeGeometry(1.3 * bw, 2.5, 16), mat(cloth, 0.85)); skirt.position.y = -0.45; skirt.castShadow = true; pelvis.add(skirt); }
+
+  const spine = new THREE.Object3D(); spine.position.set(0, 0.45, 0); pelvis.add(spine); B.spine = spine;
+  const chest = new THREE.Object3D(); chest.position.set(0, 0.5, 0); spine.add(chest); B.chest = chest;
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.82 * bw, 0.62 * bw, 1.0, 12), mat(cloth, 0.85)); torso.position.y = 0.05; torso.castShadow = true; chest.add(torso);
+  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.92 * bw, 14, 10), mat(cloth, 0.85)); shoulders.scale.set(1, 0.5, 0.78); shoulders.position.y = 0.55; chest.add(shoulders);
+
+  const neck = new THREE.Object3D(); neck.position.set(0, 0.62, 0); chest.add(neck); B.neck = neck;
+  const head = new THREE.Object3D(); head.position.set(0, 0.42, 0); neck.add(head); B.head = head;
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.6 * (0.92 + bw * 0.08), 18, 14), mat(skin, 0.7)); skull.scale.set(1, 1.12, 1.02); skull.castShadow = true; head.add(skull);
+  for (const sx of [-0.2, 0.2]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), mat(0x1b1d24, 0.4)); eye.position.set(sx, 0.05, 0.52); head.add(eye); }
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.63 * (0.92 + bw * 0.08), 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), mat(o.hair != null ? o.hair : 0x3a2b1d, 0.9)); hair.position.y = 0.06; head.add(hair);
+  if (o.tr) {
+    if (o.tr.ears === 'pointy') for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.55, 6), mat(skin, 0.7)); ear.position.set(s * 0.58, 0.16, 0); ear.rotation.z = s * -0.5; head.add(ear); }
+    if (o.tr.beard) { const beard = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8, 10), mat(o.hair != null ? o.hair : 0x6b5034, 0.9)); beard.position.set(0, -0.42, 0.32); beard.rotation.x = Math.PI; head.add(beard); }
+    if (o.tr.tusks) for (const s of [-1, 1]) { const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.36, 6), mat(0xeae0c8, 0.5)); tusk.position.set(s * 0.17, -0.28, 0.46); head.add(tusk); }
+  }
+
+  for (const s of [-1, 1]) {
+    const sh = new THREE.Object3D(); sh.position.set(s * 0.64 * bw, 0.5, 0); chest.add(sh); sh.rotation.z = s * 0.12;
+    const up = boneSeg(sh, 0, 0, 0, 0.95, 0.19 * bw, 0.15 * bw, o.robe ? cloth : skin);
+    const fore = boneSeg(up, 0, -0.95, 0, 0.9, 0.15 * bw, 0.13 * bw, skin);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), mat(skin, 0.7)); hand.position.y = -0.9; hand.castShadow = true; fore.add(hand);
+    if (s > 0) { B.shoulderR = sh; B.armR = up; B.foreR = fore; } else { B.shoulderL = sh; B.armL = up; B.foreL = fore; }
+  }
+  if (o.weapon) { const w = makeWeapon(o.robe, o.realmColor); w.position.set(0, -0.9, 0.05); w.rotation.x = -0.2; B.foreR.add(w); anim.weapon = w; }
+
+  for (const s of [-1, 1]) {
+    const hip = new THREE.Object3D(); hip.position.set(s * 0.26 * bw, -0.08, 0); pelvis.add(hip);
+    const thigh = boneSeg(hip, 0, 0, 0, 1.0, 0.23 * bw, 0.18 * bw, legCol);
+    const shin = boneSeg(thigh, 0, -1.0, 0, 0.95, 0.17 * bw, 0.14 * bw, legCol);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32 * bw, 0.2, 0.6), mat(0x222026, 0.7)); foot.position.set(0, -0.95, 0.14); foot.castShadow = true; shin.add(foot);
+    if (s > 0) { B.thighR = thigh; B.shinR = shin; } else { B.thighL = thigh; B.shinL = shin; }
+  }
+
+  if (o.npc) { const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 8, 18), new THREE.MeshStandardMaterial({ color: 0xf0d889, emissive: 0xf0d889, emissiveIntensity: 0.5, roughness: 0.4 })); halo.rotation.x = Math.PI / 2; halo.position.y = 0.95; head.add(halo); }
+}
+
 function buildBeast(g, anim, color) {
   const fur = () => mat(color, 0.92);
   const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), fur()); body.scale.set(1.0, 0.85, 1.7); body.position.y = 1.7; body.castShadow = true; g.add(body);
@@ -796,7 +817,7 @@ function buildBeast(g, anim, color) {
 
 function makeBody(kind, realm, cls, race) {
   const g = new THREE.Group();
-  const anim = { phase: Math.random() * 6, swing: 0, arms: [], legs: [], weapon: null, body: null, bodyY: 0, prev: null };
+  const anim = { phase: Math.random() * 6, swing: 0, cast: 0, arms: [], legs: [], weapon: null, body: null, bodyY: 0 };
 
   if (kind === 'mob') {
     const type = cls || '';
@@ -811,53 +832,76 @@ function makeBody(kind, realm, cls, race) {
       g.scale.setScalar(['drake', 'jotun', 'giant'].includes(type) ? 1.45 : type === 'rat' ? 0.7 : 1.05);
     }
     g.userData.anim = anim;
+    g.userData.rigRoots = [...g.children];
     return g;
   }
 
-  // joueur / PNJ / IA : humanoïde réaliste selon race + classe
   const arch = cls ? classById(cls)?.arch : null;
   const robe = ['caster', 'healer', 'support'].includes(arch);
   const tr = race ? raceTraits(race) : { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
   const bw = tr.build === 'stocky' ? 1.18 : tr.build === 'slim' ? 0.84 : 1;
   const cloth = realm ? REALMS[realm].color : (KIND_COLORS[kind] || 0x8899aa);
-  buildHumanoid(g, anim, { skin: tr.skin, cloth, bw, robe, tr,
-    realmColor: realm ? REALMS[realm].color : 0x9fd0ff, weapon: true, npc: kind === 'npc' });
+  buildHumanoid(g, anim, { skin: tr.skin, cloth, bw, robe, tr, realmColor: realm ? REALMS[realm].color : 0x9fd0ff, weapon: true, npc: kind === 'npc' });
   g.scale.set(tr.w, tr.h, tr.w);
   g.userData.anim = anim;
+  g.userData.rigRoots = [...g.children];
   return g;
 }
 
-function startSwing(group) {
-  const a = group.userData.anim;
-  if (a) a.swing = 0.35;
-}
+function startSwing(group) { if (group.userData.gltf) return playModelAction(group, 'attack'); const a = group.userData.anim; if (a) a.swing = 0.42; }
+function startCast(group) { if (group.userData.gltf) return playModelAction(group, 'cast'); const a = group.userData.anim; if (a) a.cast = 0.6; }
+const lerpA = (o, k, target, t) => { o.rotation[k] += (target - o.rotation[k]) * t; };
 
-// animation procédurale : marche, repos, coup d'arme
-function animateBody(group, speed, dt, elapsed) {
+function animateBody(group, speed, dt, elapsed, opts) {
+  if (group.userData.gltf) { updateModelAnim(group, speed, dt, opts || {}); return; }
   const a = group.userData.anim;
   if (!a) return;
+  if (a.rig) { animateRig(a, speed, dt, elapsed, opts || {}); return; }
   const moving = speed > 1.2;
   if (moving) a.phase += dt * Math.min(speed, 22) * 0.55;
   const sw = moving ? Math.sin(a.phase * 2.2) * 0.65 : 0;
-  if (a.legs.length === 4) { // quadrupède
-    a.legs[0].rotation.x = sw; a.legs[3].rotation.x = sw;
-    a.legs[1].rotation.x = -sw; a.legs[2].rotation.x = -sw;
-  } else if (a.legs.length === 2) {
-    a.legs[0].rotation.x = sw; a.legs[1].rotation.x = -sw;
-    if (a.arms[0]) { a.arms[0].rotation.x = -sw * 0.8; }
-    if (a.arms[1]) { a.arms[1].rotation.x = sw * 0.8; }
+  if (a.legs.length === 4) { a.legs[0].rotation.x = sw; a.legs[3].rotation.x = sw; a.legs[1].rotation.x = -sw; a.legs[2].rotation.x = -sw; }
+  if (a.body) a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(a.phase * 2.2)) * 0.14 : Math.sin(elapsed * 1.6 + a.phase) * 0.05);
+}
+
+function animateRig(a, speed, dt, elapsed, opts) {
+  const B = a.bones; const t = Math.min(1, dt * 12);
+  if (opts.dead) {
+    a.deadT = Math.min(1, a.deadT + dt * 2.5); const k = a.deadT;
+    B.pelvis.position.y = a.pelY * (1 - k) + 0.5 * k;
+    lerpA(B.spine, 'x', -1.4 * k, t); lerpA(B.chest, 'x', -0.6 * k, t);
+    lerpA(B.thighL, 'x', -0.6 * k, t); lerpA(B.thighR, 'x', -0.6 * k, t);
+    lerpA(B.armL, 'x', 0.5 * k, t); lerpA(B.armR, 'x', 0.5 * k, t);
+    return;
   }
-  if (a.body) {
-    a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(a.phase * 2.2)) * 0.14 : Math.sin(elapsed * 1.6 + a.phase) * 0.05);
+  if (a.deadT > 0) a.deadT = Math.max(0, a.deadT - dt * 3);
+  const lo = Math.max(0, Math.min(1, speed / 8));
+  const moving = speed > 0.8;
+  a.phase += dt * (moving ? Math.min(speed, 18) * 0.45 : 1.5);
+  const air = opts.air ? 1 : 0;
+  const ls = Math.sin(a.phase * 2);
+  lerpA(B.thighL, 'x', (-ls * 0.7 * lo) - air * 0.7, t);
+  lerpA(B.thighR, 'x', (ls * 0.7 * lo) - air * 0.7, t);
+  lerpA(B.shinL, 'x', (Math.max(0, ls) * 0.8 * lo) + air * 0.9, t);
+  lerpA(B.shinR, 'x', (Math.max(0, -ls) * 0.8 * lo) + air * 0.9, t);
+  const acting = a.swing > 0 || a.cast > 0;
+  if (!acting) {
+    lerpA(B.armL, 'x', ls * 0.55 * lo + Math.sin(elapsed * 1.5) * 0.04 * (1 - lo), t);
+    lerpA(B.armR, 'x', -ls * 0.55 * lo + Math.sin(elapsed * 1.5 + 1) * 0.04 * (1 - lo), t);
+    lerpA(B.foreL, 'x', -0.2 - Math.abs(ls) * 0.3 * lo, t);
+    lerpA(B.foreR, 'x', -0.2 - Math.abs(ls) * 0.3 * lo, t);
+    lerpA(B.chest, 'y', ls * 0.12 * lo, t);
   }
-  if (a.weapon) {
-    if (a.swing > 0) {
-      a.swing -= dt;
-      const k = 1 - Math.max(a.swing, 0) / 0.35;
-      a.weapon.rotation.x = -Math.sin(k * Math.PI) * 1.7;
-    } else {
-      a.weapon.rotation.x = moving ? sw * 0.3 : Math.sin(elapsed * 1.6 + a.phase) * 0.06;
-    }
+  lerpA(B.spine, 'x', lo * 0.1 + Math.sin(elapsed * 1.4) * 0.02 * (1 - lo), t);
+  B.pelvis.position.y = a.pelY + (moving ? Math.abs(Math.sin(a.phase * 2)) * 0.12 * lo : Math.sin(elapsed * 1.5) * 0.03) - air * 0.1;
+  if (a.swing > 0) {
+    a.swing -= dt; const sw = Math.sin((1 - Math.max(a.swing, 0) / 0.42) * Math.PI);
+    B.armR.rotation.x = -2.2 * sw; B.foreR.rotation.x = -0.6 - sw * 0.6; B.chest.rotation.y = -0.3 * sw;
+  }
+  if (a.cast > 0) {
+    a.cast -= dt; const k = Math.sin((1 - Math.max(a.cast, 0) / 0.6) * Math.PI);
+    B.armR.rotation.x = -1.4 * k; B.armL.rotation.x = -1.4 * k;
+    B.foreR.rotation.x = -0.8 * k; B.foreL.rotation.x = -0.8 * k; B.chest.rotation.x = -0.15 * k;
   }
 }
 
@@ -878,6 +922,10 @@ function syncEntities(list, myRealm) {
     if (!e) {
       const mesh = makeBody(kind, realm || null, cls, race || null);
       scene.add(mesh);
+      if (kind === 'player' || kind === 'ai' || kind === 'npc') {
+        const arch = cls ? classById(cls)?.arch : null;
+        tryLoadModel(THREE, mesh, { key: (realm || '') + ':' + (arch || ''), race: race || null, arch });
+      }
       e = { mesh, data: {}, label: null, labelKey: '' };
       entities.set(id, e);
       mesh.position.set(x, terrainHeight(x, z), z);
@@ -909,6 +957,7 @@ function syncEntities(list, myRealm) {
 let myMesh = null;
 function initSelf(create) {
   myMesh = makeBody('player', create.realm, create.cls, create.race);
+  tryLoadModel(THREE, myMesh, { key: create.realm + ':' + (classById(create.cls)?.arch || ''), race: create.race, arch: classById(create.cls)?.arch });
   scene.add(myMesh);
   const base = REALMS[create.realm].base;
   me.x = base.x; me.z = base.z;
@@ -1118,7 +1167,7 @@ function animate() {
     // animation du joueur local
     const mySpeed = myMesh.position.distanceTo(myPrev) / Math.max(dt, 0.001);
     myPrev.copy(myMesh.position);
-    animateBody(myMesh, mySpeed, dt, elapsed);
+    animateBody(myMesh, mySpeed, dt, elapsed, { air: jumpY > 0.4, dead: me.dead });
 
     // interpolation + animation des autres entités
     for (const ent of entities.values()) {
@@ -1129,11 +1178,12 @@ function animate() {
       p.y = terrainHeight(p.x, p.z);
       ent.mesh.rotation.y += (ent.try - ent.mesh.rotation.y) * Math.min(1, dt * 8);
       const spd = Math.hypot(p.x - px, p.z - pz) / Math.max(dt, 0.001);
-      animateBody(ent.mesh, spd, dt, elapsed);
+      animateBody(ent.mesh, spd, dt, elapsed, { dead: ent.data.dead });
     }
 
     // effets visuels
     fxUpdate(dt);
+    updateModelMixers(dt);
 
     // caméra orbitale
     const ph = terrainHeight(me.x, me.z);
@@ -1191,5 +1241,35 @@ function beginCreate() {
   charCreate(enterGame);
 }
 
-// Au lancement : écran de sélection si au moins un personnage existe, sinon création
-if (!charSelect({ onPlay: enterGame, onCreate: beginCreate })) beginCreate();
+// ---- Démarrage : comptes serveur (multi) ou roster local (solo) ----
+let serverChars = [];
+function showServerSelect() {
+  if (started) return;
+  if (!serverChars.length) { beginCreate(); return; }
+  charSelectServer({
+    chars: serverChars,
+    onPlay: enterGame,
+    onCreate: beginCreate,
+    onDelete: (c) => net.send(MSG.DELCHAR, { name: c.name, realm: c.realm, cls: c.cls }),
+  });
+}
+
+if (window.RAW_SOLO) {
+  // SOLO : pas de compte, roster local (localStorage)
+  if (!charSelect({ onPlay: enterGame, onCreate: beginCreate })) beginCreate();
+} else {
+  // MULTI : connexion (Google ou invité) puis personnages du compte (serveur)
+  let authed = false;
+  net.on(MSG.AUTHED, () => { authed = true; document.getElementById('login').classList.add('hidden'); });
+  net.on(MSG.ROSTER, (m) => { serverChars = m.chars || []; if (!started) showServerSelect(); });
+  const cfg = window.RAW_CONFIG || {};
+  const loginEl = document.getElementById('login');
+  const gbtn = document.getElementById('login-google');
+  const guestBtn = document.getElementById('login-guest');
+  const doAuth = (payload) => { net.ready.then(() => net.send(MSG.AUTH, payload)); };
+  if (guestBtn) guestBtn.onclick = () => doAuth({ provider: 'guest', guestId: guestId() });
+  const hasGoogle = mountGoogle(cfg.googleClientId, gbtn, (token) => doAuth({ provider: 'google', token }));
+  const note = document.getElementById('login-note');
+  if (!hasGoogle && note) note.textContent = "Connexion Google non configurée — jouez en invité (vos persos restent liés à ce navigateur).";
+  if (loginEl) loginEl.classList.remove('hidden');
+}

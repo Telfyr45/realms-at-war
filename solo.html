@@ -165,6 +165,18 @@ canvas { display: block; }
 </style>
 </head>
 <body>
+  <!-- ===== Connexion (multijoueur) ===== -->
+  <div id="login" class="hidden">
+    <div class="cc-panel cs-panel" style="max-width:460px;text-align:center">
+      <h1>⚔ Realms at War</h1>
+      <p class="cc-sub">Connectez-vous pour retrouver vos personnages sur tous vos appareils.<br/>
+        <em>Projet fan inspiré de Dark Age of Camelot — non commercial.</em></p>
+      <div id="login-google" style="display:none;justify-content:center;margin:16px 0"></div>
+      <button id="login-guest" class="cs-newbtn">Jouer en invité</button>
+      <p id="login-note" class="cc-sub" style="font-size:11px;margin-top:14px;color:#707890"></p>
+    </div>
+  </div>
+
   <!-- ===== Sélection de personnage ===== -->
   <div id="charselect" class="hidden">
     <div class="cc-panel cs-panel">
@@ -672,8 +684,10 @@ const MSG = {
   CHAT: 'chat', QUEST_ACCEPT: 'qaccept', QUEST_TURNIN: 'qturnin', BUY: 'buy', USE_ITEM: 'useitem',
   RECRUIT: 'recruit', RESPAWN: 'respawn', INTERACT: 'interact',
   LEARN: 'learn', EQUIP: 'equip', UNEQUIP: 'unequip', SELL: 'sell',
+  AUTH: 'auth', DELCHAR: 'delchar',
   // serveur -> client
   WELCOME: 'welcome', STATE: 'state', EVENT: 'event', SELF: 'self', CHAT_BC: 'chatbc', DEAD: 'dead',
+  AUTHED: 'authed', ROSTER: 'roster',
 };
 
 // ============================================================
@@ -1055,18 +1069,74 @@ class Game {
     this.fort = { x: 0, z: 0, owner: null, progress: 0, capturer: null };
     // sauvegarde des personnages (fichier côté serveur, localStorage en solo)
     this.storage = storage;
-    this.saves = {};
     this.savesDirty = false;
-    try { this.saves = (storage && storage.load()) || {}; } catch { this.saves = {}; }
+    let raw = {};
+    try { raw = (storage && storage.load()) || {}; } catch { raw = {}; }
+    if (!raw.accounts) {
+      // migration : anciennes sauvegardes à plat -> compte invité hérité
+      const legacy = {};
+      for (const [k, v] of Object.entries(raw)) if (typeof k === 'string' && k.includes('|')) legacy[k] = v;
+      this.saves = { accounts: Object.keys(legacy).length ? { 'solo': { chars: legacy } } : {} };
+    } else { this.saves = raw; if (!this.saves.accounts) this.saves.accounts = {}; }
     this.spawnWorld();
   }
 
-  // ============ SAUVEGARDE ============
+  // ============ COMPTES & SAUVEGARDE ============
   saveKey(p) { return `${p.name.toLowerCase()}|${p.realm}|${p.cls}`; }
+  acct(id) { return (this.saves.accounts[id] ||= { chars: {} }); }
+
+  rosterFor(account) {
+    const acc = this.saves.accounts[account];
+    if (!acc) return [];
+    return Object.entries(acc.chars).map(([k, v]) => {
+      const parts = k.split('|');
+      return { name: v.name || parts[0], realm: parts[1], cls: parts[2], race: v.race || null, lvl: v.lvl || 1, gold: v.gold || 0 };
+    });
+  }
+
+  async verifyGoogle(token) {
+    try {
+      const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token));
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (process.env.GOOGLE_CLIENT_ID && d.aud !== process.env.GOOGLE_CLIENT_ID) return null;
+      if (!d.sub) return null;
+      return { sub: d.sub, email: d.email || null, name: d.name || d.email || null };
+    } catch { return null; }
+  }
+
+  async onAuth(session, m) {
+    let account, email = null, name = null;
+    if (m.provider === 'google' && m.token) {
+      const g = await this.verifyGoogle(m.token);
+      if (!g) { this.send(session, MSG.EVENT, { text: 'Connexion Google refusée — réessayez ou continuez en invité.', cat: 'info' }); return; }
+      account = 'google:' + g.sub; email = g.email; name = g.name;
+    } else {
+      const gid = String(m.guestId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || ('anon' + Math.random().toString(36).slice(2, 10));
+      account = 'guest:' + gid;
+    }
+    session.account = account;
+    const acc = this.acct(account);
+    if (email) acc.email = email;
+    if (name) acc.name = name;
+    this.savesDirty = true; this.flushSaves();
+    this.send(session, MSG.AUTHED, { account, email, name, guest: account.startsWith('guest:') });
+    this.send(session, MSG.ROSTER, { chars: this.rosterFor(account) });
+  }
+
+  onDelChar(session, m) {
+    if (!session.account) return;
+    const acc = this.acct(session.account);
+    const key = `${String(m.name || '').toLowerCase()}|${m.realm}|${m.cls}`;
+    if (acc.chars[key]) { delete acc.chars[key]; this.savesDirty = true; this.flushSaves(); }
+    this.send(session, MSG.ROSTER, { chars: this.rosterFor(session.account) });
+  }
 
   persistPlayer(p) {
-    if (!this.storage || !p || p.kind !== 'player') return;
-    this.saves[this.saveKey(p)] = {
+    if (!this.storage || !p || p.kind !== 'player' || !p.account) return;
+    const acc = this.acct(p.account);
+    acc.chars[this.saveKey(p)] = {
+      name: p.name, race: p.race,
       lvl: p.lvl, xp: p.xp, gold: p.gold, items: p.items, quests: p.quests,
       learned: p.learned, equip: p.equip, bag: p.bag,
       x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, ts: now(),
@@ -1323,6 +1393,8 @@ class Game {
 
   // ============ MESSAGES CLIENT ============
   handleMessage(session, m) {
+    if (m.type === MSG.AUTH) return this.onAuth(session, m);
+    if (m.type === MSG.DELCHAR) return this.onDelChar(session, m);
     if (m.type === MSG.CREATE) return this.onCreate(session, m);
     const p = session.player;
     if (!p) return;
@@ -1370,6 +1442,7 @@ class Game {
 
   onCreate(session, m) {
     if (session.player) return;
+    if (!session.account) session.account = 'solo'; // solo / repli (le multi authentifie avant)
     const cls = classById(m.cls);
     if (!cls || !REALMS[m.realm] || cls.realm !== m.realm) return;
     const race = REALMS[m.realm].races.includes(m.race) ? m.race : cls.races[0];
@@ -1388,10 +1461,11 @@ class Game {
       dead: false, targetId: null, autoAttack: false, swingAt: 0,
       effects: [], cooldowns: {}, stealthed: false, lastCombat: 0,
       quests: {}, // id -> {progress, done}
+      account: session.account,
       session,
     };
-    // restauration d'une sauvegarde existante (même nom + royaume + classe)
-    const sv = this.saves[this.saveKey(p)];
+    // restauration depuis le compte (même nom + royaume + classe)
+    const sv = this.acct(session.account).chars[this.saveKey(p)];
     let restored = false;
     if (sv && sv.lvl >= 1) {
       restored = true;
@@ -1415,6 +1489,8 @@ class Game {
       fort: { x: this.fort.x, z: this.fort.z, owner: this.fort.owner },
     });
     this.sendSelf(p);
+    this.persistPlayer(p);
+    this.send(session, MSG.ROSTER, { chars: this.rosterFor(session.account) });
     this.broadcastEvent(`${name} (${cls.name}) rejoint ${REALMS[m.realm].name} !`, 'system', m.realm);
   }
 
@@ -2055,6 +2131,7 @@ function aiName(realm) {
   return n;
 }
 // ===== Mode SOLO : serveur simulé localement, zéro réseau =====
+window.RAW_SOLO = true;
 class Net {
   constructor(game) {
     this.handlers = {};
@@ -2550,6 +2627,40 @@ function charSelect({ onPlay, onCreate }) {
   screen.classList.remove('hidden');
   return true;
 }
+
+
+// Variante "compte serveur" : rendu de l'écran de sélection à partir d'une
+// liste de personnages fournie par le serveur (cross-device).
+function charSelectServer({ chars, onPlay, onCreate, onDelete }) {
+  const screen = document.getElementById('charselect');
+  const listEl = document.getElementById('cs-list');
+  if (!screen || !listEl) return;
+  listEl.innerHTML = '';
+  const list = (chars || []).slice().sort((a, b) => (b.lvl || 0) - (a.lvl || 0));
+  for (const ch of list) {
+    const cls = classById(ch.cls); const realm = REALMS[ch.realm];
+    if (!cls || !realm) continue;
+    const card = document.createElement('div');
+    card.className = 'cs-card';
+    card.style.setProperty('--rc', realm.colorCss);
+    card.innerHTML =
+      `<button class="cs-del" title="Supprimer ce personnage">✕</button>` +
+      `<div class="cs-name">${ch.name}</div>` +
+      `<div class="cs-line"><span class="cs-realm">${realm.name}</span> · ${cls.name}</div>` +
+      `<div class="cs-sub">${ARCHETYPES[cls.arch].label} · ${ch.race || cls.races[0]}</div>` +
+      `<div class="cs-stats">Niveau ${ch.lvl || 1}${ch.gold != null ? ` · ${ch.gold} or` : ''}</div>` +
+      `<div class="cs-play">▶ Jouer</div>`;
+    card.querySelector('.cs-del').onclick = (e) => {
+      e.stopPropagation();
+      if (confirm(`Supprimer ${ch.name} ? (definitif, cote serveur)`)) onDelete && onDelete(ch);
+    };
+    card.onclick = () => { screen.classList.add('hidden'); onPlay({ name: ch.name, realm: ch.realm, cls: ch.cls, race: ch.race || cls.races[0] }); };
+    listEl.appendChild(card);
+  }
+  const newBtn = document.getElementById('cs-new');
+  if (newBtn) newBtn.onclick = () => { screen.classList.add('hidden'); onCreate && onCreate(); };
+  screen.classList.remove('hidden');
+}
 // ============================================================
 // Sons procéduraux (Web Audio API) — aucun fichier externe.
 // Fonctionne en multijoueur comme en solo. Coupable avec M.
@@ -2706,6 +2817,141 @@ function resetUI() {
     if (!el) continue;
     for (const p of ['left', 'top', 'right', 'bottom', 'width', 'height', 'transform']) el.style[p] = '';
   }
+}
+// ============================================================
+// Chargeur de modèles glTF/GLB avec animations + repli procédural.
+//
+// 1) Pack de démo CC0 prêt à l'emploi : mettez useDemoModels:true dans
+//    window.RAW_CONFIG (index.html) -> tous les humanoïdes utilisent le
+//    modèle riggé "RobotExpressive" (Tomás Laulhé / Don McCurdy, CC0),
+//    servi par CDN (jsDelivr), avec ses animations idle/walk/run/jump/
+//    death/punch. Aucun fichier à héberger.
+// 2) Vos propres modèles : renseignez MODEL_URLS (par race, archétype,
+//    ou clé "royaume:archétype") avec une URL .glb. Voir MODELES.md.
+// ============================================================
+const MODEL_URLS = {};
+const DEMO_MODEL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
+const TARGET_HEIGHT = 4.7; // hauteur cible (unités du jeu) pour mettre le modèle à l'échelle
+
+// correspondances état du jeu -> noms de clips possibles (minuscules)
+const CLIPS = {
+  idle: ['idle'], walk: ['walking', 'walk'], run: ['running', 'run', 'walking'],
+  jump: ['jump'], death: ['death', 'die'], attack: ['punch', 'attack', 'slash'], cast: ['wave', 'yes', 'cast'],
+};
+
+let _Loader = null, _tried = false;
+function updateModelMixers() {} // (compat : les mixers sont mis à jour par entité)
+
+function demoOn() { return !!(window.RAW_CONFIG && window.RAW_CONFIG.useDemoModels); }
+function modelUrlFor({ key, race, arch }) {
+  return MODEL_URLS[key] || MODEL_URLS[race] || MODEL_URLS[arch] || (demoOn() ? DEMO_MODEL : null);
+}
+
+async function loaderClass() {
+  if (_tried) return _Loader;
+  _tried = true;
+  try { _Loader = (await import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js')).GLTFLoader; }
+  catch (e) { console.warn('[models] GLTFLoader indisponible — modèles procéduraux conservés.', e); }
+  return _Loader;
+}
+
+function pickAction(actions, names) { for (const n of names) if (actions[n]) return actions[n]; return null; }
+
+async function tryLoadModel(THREE, group, opts) {
+  const url = modelUrlFor(opts);
+  if (!url) return false;
+  const Loader = await loaderClass();
+  if (!Loader) return false;
+  return new Promise((resolve) => {
+    new Loader().load(url, (gltf) => {
+      try {
+        const model = gltf.scene;
+        // mise à l'échelle + pieds au sol
+        const box = new THREE.Box3().setFromObject(model);
+        const h = Math.max(0.01, box.max.y - box.min.y);
+        const s = TARGET_HEIGHT / h;
+        model.scale.setScalar(s);
+        model.position.y = -box.min.y * s;
+        model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+        // masque le placeholder procédural (sans toucher aux labels/sprites)
+        (group.userData.rigRoots || []).forEach((c) => { c.visible = false; });
+        group.add(model);
+        const mixer = new THREE.AnimationMixer(model);
+        const actions = {};
+        for (const clip of (gltf.animations || [])) actions[clip.name.toLowerCase()] = mixer.clipAction(clip);
+        const idle = pickAction(actions, CLIPS.idle) || (gltf.animations[0] && mixer.clipAction(gltf.animations[0]));
+        if (idle) idle.play();
+        group.userData.gltf = { mixer, actions, state: 'idle', current: idle, actionUntil: 0 };
+        resolve(true);
+      } catch (e) { console.warn('[models] post-chargement échoué', e); resolve(false); }
+    }, undefined, () => resolve(false));
+  });
+}
+
+function fadeTo(G, action, dur = 0.25, once = false) {
+  if (!action || action === G.current) return action || G.current;
+  action.reset();
+  if (once) { action.setLoop(2200, 1); action.clampWhenFinished = true; } // 2200 = THREE.LoopOnce
+  else action.setLoop(2201, Infinity);                                    // 2201 = THREE.LoopRepeat
+  action.fadeIn(dur); if (G.current) G.current.fadeOut(dur); action.play();
+  G.current = action; return action;
+}
+
+// animation pilotée par l'état du jeu (locomotion + mort + saut)
+function updateModelAnim(group, speed, dt, opts) {
+  const G = group.userData.gltf; if (!G) return;
+  G.mixer.update(dt);
+  if (G.actionUntil && performance.now() < G.actionUntil) return; // action ponctuelle en cours
+  let want = 'idle';
+  if (opts.dead && G.actions[CLIPS.death[0]]) want = 'death';
+  else if (opts.air && pickAction(G.actions, CLIPS.jump)) want = 'jump';
+  else if (speed > 9 && pickAction(G.actions, CLIPS.run)) want = 'run';
+  else if (speed > 0.8) want = 'walk';
+  if (want !== G.state) {
+    const a = fadeTo(G, pickAction(G.actions, CLIPS[want]) || pickAction(G.actions, CLIPS.idle));
+    if (a) G.state = want;
+  }
+}
+
+// action ponctuelle (attaque / sort) : joue le clip puis revient à la locomotion
+function playModelAction(group, kind) {
+  const G = group.userData.gltf; if (!G) return;
+  const a = pickAction(G.actions, CLIPS[kind]); if (!a) return;
+  fadeTo(G, a, 0.12, true);
+  G.state = '_action';
+  const dur = a.getClip() ? a.getClip().duration : 0.6;
+  G.actionUntil = performance.now() + Math.min(dur, 1.2) * 1000;
+}
+// ============================================================
+// Authentification client : identité invité (persistée localement)
+// + connexion Google (Google Identity Services) optionnelle.
+// ============================================================
+const GID_KEY = 'raw_guestid';
+
+function guestId() {
+  let id = null;
+  try { id = localStorage.getItem(GID_KEY); } catch {}
+  if (!id) { id = 'g' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); try { localStorage.setItem(GID_KEY, id); } catch {} }
+  return id;
+}
+
+// Affiche le bouton "Se connecter avec Google" si un client_id est fourni.
+// onToken(idToken) est appelé quand l'utilisateur se connecte.
+function mountGoogle(clientId, btnEl, onToken) {
+  if (!clientId || !btnEl) return false;
+  const start = () => {
+    try {
+      window.google.accounts.id.initialize({ client_id: clientId, callback: (resp) => { if (resp && resp.credential) onToken(resp.credential); } });
+      window.google.accounts.id.renderButton(btnEl, { theme: 'filled_blue', size: 'large', text: 'continue_with', shape: 'pill' });
+      btnEl.style.display = '';
+    } catch (e) { console.warn('[auth] Google Sign-In indisponible', e); }
+  };
+  if (window.google && window.google.accounts && window.google.accounts.id) { start(); return true; }
+  const sc = document.createElement('script');
+  sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true; sc.defer = true;
+  sc.onload = start; sc.onerror = () => console.warn('[auth] échec du chargement de Google Identity');
+  document.head.appendChild(sc);
+  return true;
 }
 // ============================================================
 // REALMS AT WAR — client 3D low poly (Three.js)
@@ -3292,6 +3538,7 @@ function castFx(slot) {
   const tgt = targetId ? entities.get(targetId) : null;
   const selfPos = { x: me.x, z: me.z };
   const realmColor = REALMS[cls.realm].color;
+  if (['spell', 'dot', 'aoe', 'heal', 'groupheal', 'hot', 'buff', 'mez', 'root'].includes(sk.t)) startCast(myMesh);
   switch (sk.t) {
     case 'melee': case 'stun':
       startSwing(myMesh);
@@ -3441,45 +3688,63 @@ function makeWeapon(robe, realmColor) {
 }
 
 // silhouette humanoïde proportionnée et lissée
-function buildHumanoid(g, anim, o) {
-  const skinMat = () => mat(o.skin, 0.72);
-  const clothMat = () => mat(o.cloth, 0.85);
-  const bw = o.bw;
-  // jambes
-  for (const s of [-1, 1]) {
-    const leg = limb(0.46 * bw, 1.6, 0.46 * bw, o.robe ? o.cloth : 0x33363f);
-    leg.position.set(s * 0.34 * bw, 1.6, 0); anim.legs.push(leg); g.add(leg);
-  }
-  // bassin / torse / épaules
-  const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.62 * bw, 0.72 * bw, 0.7, 12), clothMat()); pelvis.position.y = 1.7; pelvis.castShadow = true; g.add(pelvis);
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.86 * bw, 0.6 * bw, 1.7, 12), clothMat()); torso.position.y = 2.7; torso.castShadow = true; g.add(torso);
-  anim.body = torso; anim.bodyY = 2.7;
-  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.95 * bw, 14, 10), clothMat()); shoulders.scale.set(1, 0.55, 0.8); shoulders.position.y = 3.45; shoulders.castShadow = true; g.add(shoulders);
-  if (o.robe) { const skirt = new THREE.Mesh(new THREE.ConeGeometry(1.3 * bw, 2.6, 16), clothMat()); skirt.position.y = 1.3; skirt.castShadow = true; g.add(skirt); }
-  // cou + tête
-  const HY = 4.15;
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.4, 10), skinMat()); neck.position.y = 3.75; g.add(neck);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.62 * (0.92 + bw * 0.08), 18, 14), skinMat());
-  head.scale.set(1, 1.12, 1.02); head.position.y = HY; head.castShadow = true; g.add(head);
-  for (const sx of [-0.2, 0.2]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), mat(0x1b1d24, 0.4)); eye.position.set(sx, HY + 0.05, 0.54); g.add(eye); }
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.66 * (0.92 + bw * 0.08), 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), mat(o.hair != null ? o.hair : 0x3a2b1d, 0.9));
-  hair.position.y = HY + 0.05; g.add(hair);
-  if (o.tr) {
-    if (o.tr.ears === 'pointy') for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.55, 6), skinMat()); ear.position.set(s * 0.6, HY + 0.16, 0); ear.rotation.z = s * -0.5; g.add(ear); }
-    if (o.tr.beard) { const beard = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.85, 10), mat(o.hair != null ? o.hair : 0x6b5034, 0.9)); beard.position.set(0, HY - 0.5, 0.34); beard.rotation.x = Math.PI; g.add(beard); }
-    if (o.tr.tusks) for (const s of [-1, 1]) { const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.38, 6), mat(0xeae0c8, 0.5)); tusk.position.set(s * 0.18, HY - 0.32, 0.48); g.add(tusk); }
-  }
-  // bras
-  for (const s of [-1, 1]) { const arm = limb(0.4 * bw, 1.5, 0.4 * bw, o.skin); arm.position.set(s * (0.92 * bw + 0.05), 3.4, 0); anim.arms.push(arm); g.add(arm); }
-  // arme (main droite)
-  if (o.weapon) { const w = makeWeapon(o.robe, o.realmColor); w.position.set(0.92 * bw + 0.05, 1.95, 0.15); anim.weapon = w; g.add(w); }
-  if (o.npc) {
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 8, 18), new THREE.MeshStandardMaterial({ color: 0xf0d889, emissive: 0xf0d889, emissiveIntensity: 0.5, roughness: 0.4 }));
-    halo.rotation.x = Math.PI / 2; halo.position.y = HY + 0.75; g.add(halo);
-  }
+// segment de membre rattaché à un os (Object3D), pivot au sommet
+function boneSeg(parent, lx, ly, lz, len, rTop, rBot, color, rough) {
+  const bone = new THREE.Object3D(); bone.position.set(lx, ly, lz); parent.add(bone);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, len, 10), mat(color, rough == null ? 0.8 : rough));
+  m.geometry.translate(0, -len / 2, 0); m.castShadow = true; bone.add(m);
+  const j = new THREE.Mesh(new THREE.SphereGeometry(rBot * 1.02, 10, 8), mat(color, 0.8));
+  j.position.y = -len; j.castShadow = true; bone.add(j);
+  return bone;
 }
 
-// créature quadrupède organique
+// Humanoide RIGGE (squelette d'os hierarchique) - animations modernes par machine a etats.
+// Sert de placeholder ; un vrai modele glTF peut le remplacer (voir client/js/models.js).
+function buildHumanoid(g, anim, o) {
+  const bw = o.bw, skin = o.skin, cloth = o.cloth, legCol = o.robe ? cloth : 0x33363f;
+  anim.rig = true; anim.phase = Math.random() * 6; anim.swing = 0; anim.cast = 0; anim.hit = 0; anim.deadT = 0;
+  const B = {}; anim.bones = B;
+
+  const pelvis = new THREE.Object3D(); pelvis.position.set(0, 2.0, 0); g.add(pelvis); B.pelvis = pelvis; anim.pelY = 2.0;
+  const pelMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.6 * bw, 0.72 * bw, 0.62, 12), mat(cloth, 0.85)); pelMesh.position.y = -0.12; pelMesh.castShadow = true; pelvis.add(pelMesh);
+  if (o.robe) { const skirt = new THREE.Mesh(new THREE.ConeGeometry(1.3 * bw, 2.5, 16), mat(cloth, 0.85)); skirt.position.y = -0.45; skirt.castShadow = true; pelvis.add(skirt); }
+
+  const spine = new THREE.Object3D(); spine.position.set(0, 0.45, 0); pelvis.add(spine); B.spine = spine;
+  const chest = new THREE.Object3D(); chest.position.set(0, 0.5, 0); spine.add(chest); B.chest = chest;
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.82 * bw, 0.62 * bw, 1.0, 12), mat(cloth, 0.85)); torso.position.y = 0.05; torso.castShadow = true; chest.add(torso);
+  const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.92 * bw, 14, 10), mat(cloth, 0.85)); shoulders.scale.set(1, 0.5, 0.78); shoulders.position.y = 0.55; chest.add(shoulders);
+
+  const neck = new THREE.Object3D(); neck.position.set(0, 0.62, 0); chest.add(neck); B.neck = neck;
+  const head = new THREE.Object3D(); head.position.set(0, 0.42, 0); neck.add(head); B.head = head;
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.6 * (0.92 + bw * 0.08), 18, 14), mat(skin, 0.7)); skull.scale.set(1, 1.12, 1.02); skull.castShadow = true; head.add(skull);
+  for (const sx of [-0.2, 0.2]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), mat(0x1b1d24, 0.4)); eye.position.set(sx, 0.05, 0.52); head.add(eye); }
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.63 * (0.92 + bw * 0.08), 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), mat(o.hair != null ? o.hair : 0x3a2b1d, 0.9)); hair.position.y = 0.06; head.add(hair);
+  if (o.tr) {
+    if (o.tr.ears === 'pointy') for (const s of [-1, 1]) { const ear = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.55, 6), mat(skin, 0.7)); ear.position.set(s * 0.58, 0.16, 0); ear.rotation.z = s * -0.5; head.add(ear); }
+    if (o.tr.beard) { const beard = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8, 10), mat(o.hair != null ? o.hair : 0x6b5034, 0.9)); beard.position.set(0, -0.42, 0.32); beard.rotation.x = Math.PI; head.add(beard); }
+    if (o.tr.tusks) for (const s of [-1, 1]) { const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.36, 6), mat(0xeae0c8, 0.5)); tusk.position.set(s * 0.17, -0.28, 0.46); head.add(tusk); }
+  }
+
+  for (const s of [-1, 1]) {
+    const sh = new THREE.Object3D(); sh.position.set(s * 0.64 * bw, 0.5, 0); chest.add(sh); sh.rotation.z = s * 0.12;
+    const up = boneSeg(sh, 0, 0, 0, 0.95, 0.19 * bw, 0.15 * bw, o.robe ? cloth : skin);
+    const fore = boneSeg(up, 0, -0.95, 0, 0.9, 0.15 * bw, 0.13 * bw, skin);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), mat(skin, 0.7)); hand.position.y = -0.9; hand.castShadow = true; fore.add(hand);
+    if (s > 0) { B.shoulderR = sh; B.armR = up; B.foreR = fore; } else { B.shoulderL = sh; B.armL = up; B.foreL = fore; }
+  }
+  if (o.weapon) { const w = makeWeapon(o.robe, o.realmColor); w.position.set(0, -0.9, 0.05); w.rotation.x = -0.2; B.foreR.add(w); anim.weapon = w; }
+
+  for (const s of [-1, 1]) {
+    const hip = new THREE.Object3D(); hip.position.set(s * 0.26 * bw, -0.08, 0); pelvis.add(hip);
+    const thigh = boneSeg(hip, 0, 0, 0, 1.0, 0.23 * bw, 0.18 * bw, legCol);
+    const shin = boneSeg(thigh, 0, -1.0, 0, 0.95, 0.17 * bw, 0.14 * bw, legCol);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32 * bw, 0.2, 0.6), mat(0x222026, 0.7)); foot.position.set(0, -0.95, 0.14); foot.castShadow = true; shin.add(foot);
+    if (s > 0) { B.thighR = thigh; B.shinR = shin; } else { B.thighL = thigh; B.shinL = shin; }
+  }
+
+  if (o.npc) { const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 8, 18), new THREE.MeshStandardMaterial({ color: 0xf0d889, emissive: 0xf0d889, emissiveIntensity: 0.5, roughness: 0.4 })); halo.rotation.x = Math.PI / 2; halo.position.y = 0.95; head.add(halo); }
+}
+
 function buildBeast(g, anim, color) {
   const fur = () => mat(color, 0.92);
   const body = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 12), fur()); body.scale.set(1.0, 0.85, 1.7); body.position.y = 1.7; body.castShadow = true; g.add(body);
@@ -3495,7 +3760,7 @@ function buildBeast(g, anim, color) {
 
 function makeBody(kind, realm, cls, race) {
   const g = new THREE.Group();
-  const anim = { phase: Math.random() * 6, swing: 0, arms: [], legs: [], weapon: null, body: null, bodyY: 0, prev: null };
+  const anim = { phase: Math.random() * 6, swing: 0, cast: 0, arms: [], legs: [], weapon: null, body: null, bodyY: 0 };
 
   if (kind === 'mob') {
     const type = cls || '';
@@ -3510,53 +3775,76 @@ function makeBody(kind, realm, cls, race) {
       g.scale.setScalar(['drake', 'jotun', 'giant'].includes(type) ? 1.45 : type === 'rat' ? 0.7 : 1.05);
     }
     g.userData.anim = anim;
+    g.userData.rigRoots = [...g.children];
     return g;
   }
 
-  // joueur / PNJ / IA : humanoïde réaliste selon race + classe
   const arch = cls ? classById(cls)?.arch : null;
   const robe = ['caster', 'healer', 'support'].includes(arch);
   const tr = race ? raceTraits(race) : { h: 1, w: 1, skin: 0xd9b48f, build: 'norm' };
   const bw = tr.build === 'stocky' ? 1.18 : tr.build === 'slim' ? 0.84 : 1;
   const cloth = realm ? REALMS[realm].color : (KIND_COLORS[kind] || 0x8899aa);
-  buildHumanoid(g, anim, { skin: tr.skin, cloth, bw, robe, tr,
-    realmColor: realm ? REALMS[realm].color : 0x9fd0ff, weapon: true, npc: kind === 'npc' });
+  buildHumanoid(g, anim, { skin: tr.skin, cloth, bw, robe, tr, realmColor: realm ? REALMS[realm].color : 0x9fd0ff, weapon: true, npc: kind === 'npc' });
   g.scale.set(tr.w, tr.h, tr.w);
   g.userData.anim = anim;
+  g.userData.rigRoots = [...g.children];
   return g;
 }
 
-function startSwing(group) {
-  const a = group.userData.anim;
-  if (a) a.swing = 0.35;
-}
+function startSwing(group) { if (group.userData.gltf) return playModelAction(group, 'attack'); const a = group.userData.anim; if (a) a.swing = 0.42; }
+function startCast(group) { if (group.userData.gltf) return playModelAction(group, 'cast'); const a = group.userData.anim; if (a) a.cast = 0.6; }
+const lerpA = (o, k, target, t) => { o.rotation[k] += (target - o.rotation[k]) * t; };
 
-// animation procédurale : marche, repos, coup d'arme
-function animateBody(group, speed, dt, elapsed) {
+function animateBody(group, speed, dt, elapsed, opts) {
+  if (group.userData.gltf) { updateModelAnim(group, speed, dt, opts || {}); return; }
   const a = group.userData.anim;
   if (!a) return;
+  if (a.rig) { animateRig(a, speed, dt, elapsed, opts || {}); return; }
   const moving = speed > 1.2;
   if (moving) a.phase += dt * Math.min(speed, 22) * 0.55;
   const sw = moving ? Math.sin(a.phase * 2.2) * 0.65 : 0;
-  if (a.legs.length === 4) { // quadrupède
-    a.legs[0].rotation.x = sw; a.legs[3].rotation.x = sw;
-    a.legs[1].rotation.x = -sw; a.legs[2].rotation.x = -sw;
-  } else if (a.legs.length === 2) {
-    a.legs[0].rotation.x = sw; a.legs[1].rotation.x = -sw;
-    if (a.arms[0]) { a.arms[0].rotation.x = -sw * 0.8; }
-    if (a.arms[1]) { a.arms[1].rotation.x = sw * 0.8; }
+  if (a.legs.length === 4) { a.legs[0].rotation.x = sw; a.legs[3].rotation.x = sw; a.legs[1].rotation.x = -sw; a.legs[2].rotation.x = -sw; }
+  if (a.body) a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(a.phase * 2.2)) * 0.14 : Math.sin(elapsed * 1.6 + a.phase) * 0.05);
+}
+
+function animateRig(a, speed, dt, elapsed, opts) {
+  const B = a.bones; const t = Math.min(1, dt * 12);
+  if (opts.dead) {
+    a.deadT = Math.min(1, a.deadT + dt * 2.5); const k = a.deadT;
+    B.pelvis.position.y = a.pelY * (1 - k) + 0.5 * k;
+    lerpA(B.spine, 'x', -1.4 * k, t); lerpA(B.chest, 'x', -0.6 * k, t);
+    lerpA(B.thighL, 'x', -0.6 * k, t); lerpA(B.thighR, 'x', -0.6 * k, t);
+    lerpA(B.armL, 'x', 0.5 * k, t); lerpA(B.armR, 'x', 0.5 * k, t);
+    return;
   }
-  if (a.body) {
-    a.body.position.y = a.bodyY + (moving ? Math.abs(Math.sin(a.phase * 2.2)) * 0.14 : Math.sin(elapsed * 1.6 + a.phase) * 0.05);
+  if (a.deadT > 0) a.deadT = Math.max(0, a.deadT - dt * 3);
+  const lo = Math.max(0, Math.min(1, speed / 8));
+  const moving = speed > 0.8;
+  a.phase += dt * (moving ? Math.min(speed, 18) * 0.45 : 1.5);
+  const air = opts.air ? 1 : 0;
+  const ls = Math.sin(a.phase * 2);
+  lerpA(B.thighL, 'x', (-ls * 0.7 * lo) - air * 0.7, t);
+  lerpA(B.thighR, 'x', (ls * 0.7 * lo) - air * 0.7, t);
+  lerpA(B.shinL, 'x', (Math.max(0, ls) * 0.8 * lo) + air * 0.9, t);
+  lerpA(B.shinR, 'x', (Math.max(0, -ls) * 0.8 * lo) + air * 0.9, t);
+  const acting = a.swing > 0 || a.cast > 0;
+  if (!acting) {
+    lerpA(B.armL, 'x', ls * 0.55 * lo + Math.sin(elapsed * 1.5) * 0.04 * (1 - lo), t);
+    lerpA(B.armR, 'x', -ls * 0.55 * lo + Math.sin(elapsed * 1.5 + 1) * 0.04 * (1 - lo), t);
+    lerpA(B.foreL, 'x', -0.2 - Math.abs(ls) * 0.3 * lo, t);
+    lerpA(B.foreR, 'x', -0.2 - Math.abs(ls) * 0.3 * lo, t);
+    lerpA(B.chest, 'y', ls * 0.12 * lo, t);
   }
-  if (a.weapon) {
-    if (a.swing > 0) {
-      a.swing -= dt;
-      const k = 1 - Math.max(a.swing, 0) / 0.35;
-      a.weapon.rotation.x = -Math.sin(k * Math.PI) * 1.7;
-    } else {
-      a.weapon.rotation.x = moving ? sw * 0.3 : Math.sin(elapsed * 1.6 + a.phase) * 0.06;
-    }
+  lerpA(B.spine, 'x', lo * 0.1 + Math.sin(elapsed * 1.4) * 0.02 * (1 - lo), t);
+  B.pelvis.position.y = a.pelY + (moving ? Math.abs(Math.sin(a.phase * 2)) * 0.12 * lo : Math.sin(elapsed * 1.5) * 0.03) - air * 0.1;
+  if (a.swing > 0) {
+    a.swing -= dt; const sw = Math.sin((1 - Math.max(a.swing, 0) / 0.42) * Math.PI);
+    B.armR.rotation.x = -2.2 * sw; B.foreR.rotation.x = -0.6 - sw * 0.6; B.chest.rotation.y = -0.3 * sw;
+  }
+  if (a.cast > 0) {
+    a.cast -= dt; const k = Math.sin((1 - Math.max(a.cast, 0) / 0.6) * Math.PI);
+    B.armR.rotation.x = -1.4 * k; B.armL.rotation.x = -1.4 * k;
+    B.foreR.rotation.x = -0.8 * k; B.foreL.rotation.x = -0.8 * k; B.chest.rotation.x = -0.15 * k;
   }
 }
 
@@ -3577,6 +3865,10 @@ function syncEntities(list, myRealm) {
     if (!e) {
       const mesh = makeBody(kind, realm || null, cls, race || null);
       scene.add(mesh);
+      if (kind === 'player' || kind === 'ai' || kind === 'npc') {
+        const arch = cls ? classById(cls)?.arch : null;
+        tryLoadModel(THREE, mesh, { key: (realm || '') + ':' + (arch || ''), race: race || null, arch });
+      }
       e = { mesh, data: {}, label: null, labelKey: '' };
       entities.set(id, e);
       mesh.position.set(x, terrainHeight(x, z), z);
@@ -3608,6 +3900,7 @@ function syncEntities(list, myRealm) {
 let myMesh = null;
 function initSelf(create) {
   myMesh = makeBody('player', create.realm, create.cls, create.race);
+  tryLoadModel(THREE, myMesh, { key: create.realm + ':' + (classById(create.cls)?.arch || ''), race: create.race, arch: classById(create.cls)?.arch });
   scene.add(myMesh);
   const base = REALMS[create.realm].base;
   me.x = base.x; me.z = base.z;
@@ -3817,7 +4110,7 @@ function animate() {
     // animation du joueur local
     const mySpeed = myMesh.position.distanceTo(myPrev) / Math.max(dt, 0.001);
     myPrev.copy(myMesh.position);
-    animateBody(myMesh, mySpeed, dt, elapsed);
+    animateBody(myMesh, mySpeed, dt, elapsed, { air: jumpY > 0.4, dead: me.dead });
 
     // interpolation + animation des autres entités
     for (const ent of entities.values()) {
@@ -3828,11 +4121,12 @@ function animate() {
       p.y = terrainHeight(p.x, p.z);
       ent.mesh.rotation.y += (ent.try - ent.mesh.rotation.y) * Math.min(1, dt * 8);
       const spd = Math.hypot(p.x - px, p.z - pz) / Math.max(dt, 0.001);
-      animateBody(ent.mesh, spd, dt, elapsed);
+      animateBody(ent.mesh, spd, dt, elapsed, { dead: ent.data.dead });
     }
 
     // effets visuels
     fxUpdate(dt);
+    updateModelMixers(dt);
 
     // caméra orbitale
     const ph = terrainHeight(me.x, me.z);
@@ -3890,8 +4184,38 @@ function beginCreate() {
   charCreate(enterGame);
 }
 
-// Au lancement : écran de sélection si au moins un personnage existe, sinon création
-if (!charSelect({ onPlay: enterGame, onCreate: beginCreate })) beginCreate();
+// ---- Démarrage : comptes serveur (multi) ou roster local (solo) ----
+let serverChars = [];
+function showServerSelect() {
+  if (started) return;
+  if (!serverChars.length) { beginCreate(); return; }
+  charSelectServer({
+    chars: serverChars,
+    onPlay: enterGame,
+    onCreate: beginCreate,
+    onDelete: (c) => net.send(MSG.DELCHAR, { name: c.name, realm: c.realm, cls: c.cls }),
+  });
+}
+
+if (window.RAW_SOLO) {
+  // SOLO : pas de compte, roster local (localStorage)
+  if (!charSelect({ onPlay: enterGame, onCreate: beginCreate })) beginCreate();
+} else {
+  // MULTI : connexion (Google ou invité) puis personnages du compte (serveur)
+  let authed = false;
+  net.on(MSG.AUTHED, () => { authed = true; document.getElementById('login').classList.add('hidden'); });
+  net.on(MSG.ROSTER, (m) => { serverChars = m.chars || []; if (!started) showServerSelect(); });
+  const cfg = window.RAW_CONFIG || {};
+  const loginEl = document.getElementById('login');
+  const gbtn = document.getElementById('login-google');
+  const guestBtn = document.getElementById('login-guest');
+  const doAuth = (payload) => { net.ready.then(() => net.send(MSG.AUTH, payload)); };
+  if (guestBtn) guestBtn.onclick = () => doAuth({ provider: 'guest', guestId: guestId() });
+  const hasGoogle = mountGoogle(cfg.googleClientId, gbtn, (token) => doAuth({ provider: 'google', token }));
+  const note = document.getElementById('login-note');
+  if (!hasGoogle && note) note.textContent = "Connexion Google non configurée — jouez en invité (vos persos restent liés à ce navigateur).";
+  if (loginEl) loginEl.classList.remove('hidden');
+}
 </script>
 </body>
 </html>

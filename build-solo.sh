@@ -22,6 +22,7 @@ grep -q "class Game" "$W/02_game.js" || { echo "ERREUR: game.js mal extrait"; ex
 # 3) shim réseau local (remplace WebSocket) + sauvegarde dans le navigateur
 cat > "$W/03_net.js" <<'EOF'
 // ===== Mode SOLO : serveur simulé localement, zéro réseau =====
+window.RAW_SOLO = true;
 class Net {
   constructor(game) {
     this.handlers = {};
@@ -54,6 +55,8 @@ sed -e '/^import /d' -e 's/^export //' client/js/charcreate.js > "$W/05_cc.js"
 sed -e '/^import /d' -e 's/^export //' client/js/charselect.js > "$W/05b_select.js"
 sed -e '/^import /d' -e 's/^export //' client/js/sound.js > "$W/05c_sound.js"
 sed -e '/^import /d' -e 's/^export //' client/js/uikit.js > "$W/05d_uikit.js"
+sed -e '/^import /d' -e 's/^export //' client/js/models.js > "$W/05e_models.js"
+sed -e '/^import /d' -e 's/^export //' client/js/auth.js > "$W/05f_auth.js"
 
 # 5) main : import three en URL directe, suppression des imports locaux et du new Net()
 sed -e "s|from 'three'|from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js'|" \

@@ -416,8 +416,10 @@ export const MSG = {
   CHAT: 'chat', QUEST_ACCEPT: 'qaccept', QUEST_TURNIN: 'qturnin', BUY: 'buy', USE_ITEM: 'useitem',
   RECRUIT: 'recruit', RESPAWN: 'respawn', INTERACT: 'interact',
   LEARN: 'learn', EQUIP: 'equip', UNEQUIP: 'unequip', SELL: 'sell',
+  AUTH: 'auth', DELCHAR: 'delchar',
   // serveur -> client
   WELCOME: 'welcome', STATE: 'state', EVENT: 'event', SELF: 'self', CHAT_BC: 'chatbc', DEAD: 'dead',
+  AUTHED: 'authed', ROSTER: 'roster',
 };
 
 // ============================================================

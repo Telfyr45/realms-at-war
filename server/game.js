@@ -29,18 +29,74 @@ export class Game {
     this.fort = { x: 0, z: 0, owner: null, progress: 0, capturer: null };
     // sauvegarde des personnages (fichier côté serveur, localStorage en solo)
     this.storage = storage;
-    this.saves = {};
     this.savesDirty = false;
-    try { this.saves = (storage && storage.load()) || {}; } catch { this.saves = {}; }
+    let raw = {};
+    try { raw = (storage && storage.load()) || {}; } catch { raw = {}; }
+    if (!raw.accounts) {
+      // migration : anciennes sauvegardes à plat -> compte invité hérité
+      const legacy = {};
+      for (const [k, v] of Object.entries(raw)) if (typeof k === 'string' && k.includes('|')) legacy[k] = v;
+      this.saves = { accounts: Object.keys(legacy).length ? { 'solo': { chars: legacy } } : {} };
+    } else { this.saves = raw; if (!this.saves.accounts) this.saves.accounts = {}; }
     this.spawnWorld();
   }
 
-  // ============ SAUVEGARDE ============
+  // ============ COMPTES & SAUVEGARDE ============
   saveKey(p) { return `${p.name.toLowerCase()}|${p.realm}|${p.cls}`; }
+  acct(id) { return (this.saves.accounts[id] ||= { chars: {} }); }
+
+  rosterFor(account) {
+    const acc = this.saves.accounts[account];
+    if (!acc) return [];
+    return Object.entries(acc.chars).map(([k, v]) => {
+      const parts = k.split('|');
+      return { name: v.name || parts[0], realm: parts[1], cls: parts[2], race: v.race || null, lvl: v.lvl || 1, gold: v.gold || 0 };
+    });
+  }
+
+  async verifyGoogle(token) {
+    try {
+      const r = await fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token));
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (process.env.GOOGLE_CLIENT_ID && d.aud !== process.env.GOOGLE_CLIENT_ID) return null;
+      if (!d.sub) return null;
+      return { sub: d.sub, email: d.email || null, name: d.name || d.email || null };
+    } catch { return null; }
+  }
+
+  async onAuth(session, m) {
+    let account, email = null, name = null;
+    if (m.provider === 'google' && m.token) {
+      const g = await this.verifyGoogle(m.token);
+      if (!g) { this.send(session, MSG.EVENT, { text: 'Connexion Google refusée — réessayez ou continuez en invité.', cat: 'info' }); return; }
+      account = 'google:' + g.sub; email = g.email; name = g.name;
+    } else {
+      const gid = String(m.guestId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40) || ('anon' + Math.random().toString(36).slice(2, 10));
+      account = 'guest:' + gid;
+    }
+    session.account = account;
+    const acc = this.acct(account);
+    if (email) acc.email = email;
+    if (name) acc.name = name;
+    this.savesDirty = true; this.flushSaves();
+    this.send(session, MSG.AUTHED, { account, email, name, guest: account.startsWith('guest:') });
+    this.send(session, MSG.ROSTER, { chars: this.rosterFor(account) });
+  }
+
+  onDelChar(session, m) {
+    if (!session.account) return;
+    const acc = this.acct(session.account);
+    const key = `${String(m.name || '').toLowerCase()}|${m.realm}|${m.cls}`;
+    if (acc.chars[key]) { delete acc.chars[key]; this.savesDirty = true; this.flushSaves(); }
+    this.send(session, MSG.ROSTER, { chars: this.rosterFor(session.account) });
+  }
 
   persistPlayer(p) {
-    if (!this.storage || !p || p.kind !== 'player') return;
-    this.saves[this.saveKey(p)] = {
+    if (!this.storage || !p || p.kind !== 'player' || !p.account) return;
+    const acc = this.acct(p.account);
+    acc.chars[this.saveKey(p)] = {
+      name: p.name, race: p.race,
       lvl: p.lvl, xp: p.xp, gold: p.gold, items: p.items, quests: p.quests,
       learned: p.learned, equip: p.equip, bag: p.bag,
       x: Math.round(p.x * 10) / 10, z: Math.round(p.z * 10) / 10, ts: now(),
@@ -297,6 +353,8 @@ export class Game {
 
   // ============ MESSAGES CLIENT ============
   handleMessage(session, m) {
+    if (m.type === MSG.AUTH) return this.onAuth(session, m);
+    if (m.type === MSG.DELCHAR) return this.onDelChar(session, m);
     if (m.type === MSG.CREATE) return this.onCreate(session, m);
     const p = session.player;
     if (!p) return;
@@ -344,6 +402,7 @@ export class Game {
 
   onCreate(session, m) {
     if (session.player) return;
+    if (!session.account) session.account = 'solo'; // solo / repli (le multi authentifie avant)
     const cls = classById(m.cls);
     if (!cls || !REALMS[m.realm] || cls.realm !== m.realm) return;
     const race = REALMS[m.realm].races.includes(m.race) ? m.race : cls.races[0];
@@ -362,10 +421,11 @@ export class Game {
       dead: false, targetId: null, autoAttack: false, swingAt: 0,
       effects: [], cooldowns: {}, stealthed: false, lastCombat: 0,
       quests: {}, // id -> {progress, done}
+      account: session.account,
       session,
     };
-    // restauration d'une sauvegarde existante (même nom + royaume + classe)
-    const sv = this.saves[this.saveKey(p)];
+    // restauration depuis le compte (même nom + royaume + classe)
+    const sv = this.acct(session.account).chars[this.saveKey(p)];
     let restored = false;
     if (sv && sv.lvl >= 1) {
       restored = true;
@@ -389,6 +449,8 @@ export class Game {
       fort: { x: this.fort.x, z: this.fort.z, owner: this.fort.owner },
     });
     this.sendSelf(p);
+    this.persistPlayer(p);
+    this.send(session, MSG.ROSTER, { chars: this.rosterFor(session.account) });
     this.broadcastEvent(`${name} (${cls.name}) rejoint ${REALMS[m.realm].name} !`, 'system', m.realm);
   }
 

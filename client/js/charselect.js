@@ -102,3 +102,37 @@ export function charSelect({ onPlay, onCreate }) {
   screen.classList.remove('hidden');
   return true;
 }
+
+
+// Variante "compte serveur" : rendu de l'écran de sélection à partir d'une
+// liste de personnages fournie par le serveur (cross-device).
+export function charSelectServer({ chars, onPlay, onCreate, onDelete }) {
+  const screen = document.getElementById('charselect');
+  const listEl = document.getElementById('cs-list');
+  if (!screen || !listEl) return;
+  listEl.innerHTML = '';
+  const list = (chars || []).slice().sort((a, b) => (b.lvl || 0) - (a.lvl || 0));
+  for (const ch of list) {
+    const cls = classById(ch.cls); const realm = REALMS[ch.realm];
+    if (!cls || !realm) continue;
+    const card = document.createElement('div');
+    card.className = 'cs-card';
+    card.style.setProperty('--rc', realm.colorCss);
+    card.innerHTML =
+      `<button class="cs-del" title="Supprimer ce personnage">✕</button>` +
+      `<div class="cs-name">${ch.name}</div>` +
+      `<div class="cs-line"><span class="cs-realm">${realm.name}</span> · ${cls.name}</div>` +
+      `<div class="cs-sub">${ARCHETYPES[cls.arch].label} · ${ch.race || cls.races[0]}</div>` +
+      `<div class="cs-stats">Niveau ${ch.lvl || 1}${ch.gold != null ? ` · ${ch.gold} or` : ''}</div>` +
+      `<div class="cs-play">▶ Jouer</div>`;
+    card.querySelector('.cs-del').onclick = (e) => {
+      e.stopPropagation();
+      if (confirm(`Supprimer ${ch.name} ? (definitif, cote serveur)`)) onDelete && onDelete(ch);
+    };
+    card.onclick = () => { screen.classList.add('hidden'); onPlay({ name: ch.name, realm: ch.realm, cls: ch.cls, race: ch.race || cls.races[0] }); };
+    listEl.appendChild(card);
+  }
+  const newBtn = document.getElementById('cs-new');
+  if (newBtn) newBtn.onclick = () => { screen.classList.add('hidden'); onCreate && onCreate(); };
+  screen.classList.remove('hidden');
+}
