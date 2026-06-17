@@ -9,7 +9,7 @@ import { charCreate } from './charcreate.js';
 import { charSelect, charSelectServer, Roster } from './charselect.js';
 import { guestId, mountGoogle } from './auth.js';
 import { Sound } from './sound.js';
-import { setupMovableUI, resetUI } from './uikit.js';
+import { setupMovableUI, resetUI, onEscape, setResetHandler } from './uikit.js';
 import { tryLoadModel, updateModelMixers, updateModelAnim, playModelAction } from './models.js';
 import { REALMS, WORLD, FRONTIER, MSG, classById, ARCHETYPES, raceTraits } from '/shared/data.js';
 import { SCENERY, resolveMove, pushApart, entityRadius } from '/shared/collision.js';
@@ -989,9 +989,14 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyJ') ui.toggleQuestLog();
   if (e.code === 'KeyI') ui.toggleInventory();
   if (e.code === 'KeyU') { resetUI(); ui.log("Disposition de l'interface réinitialisée (U).", 'info'); }
+  setResetHandler(() => ui.log("Disposition de l'interface réinitialisée.", 'info'));
   if (e.code === 'KeyF') targetNearest();
   if (e.code === 'KeyE') interactNearest();
-  if (e.code === 'Escape') { setTarget(null); document.getElementById('dialog').classList.add('hidden'); }
+  if (e.code === 'Escape') {
+    const dlg = document.getElementById('dialog');
+    if (!dlg.classList.contains('hidden')) { dlg.classList.add('hidden'); }
+    else { onEscape(); }
+  }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 

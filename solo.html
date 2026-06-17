@@ -158,10 +158,33 @@ canvas { display: block; }
 .inv-item:hover { background: #1d2238; }
 .inv-tip { margin-top: 10px; font-size: 11px; color: #707890; }
 
-/* ===== Panneaux déplaçables / redimensionnables ===== */
-.movable { resize: both; overflow: auto; min-width: 130px; min-height: 38px; pointer-events: auto; }
-.movable:hover { outline: 1px dashed rgba(240, 216, 137, .35); outline-offset: 2px; }
-#skillbar.movable { overflow: visible; resize: none; }
+/* ===== Disposition de l'interface (mode édition uniquement) ===== */
+/* Hors mode édition : les panneaux gardent leur comportement normal (verrouillés). */
+.ui-editing .movable { resize: both; overflow: auto; min-width: 130px; min-height: 38px;
+  pointer-events: auto !important; cursor: move; outline: 2px dashed rgba(240, 216, 137, .55); outline-offset: 2px; }
+.ui-editing #skillbar.movable { overflow: visible; resize: none; }
+.ui-editing #chatwrap.movable { background: rgba(15, 18, 30, .85); border: 1px solid #4a5070; border-radius: 6px; }
+.ui-editing #chatwrap.movable::before { content: 'Chat'; position: absolute; top: -16px; left: 4px; font-size: 10px; color: #f0d889; }
+
+/* Menu (Échap) */
+#gamemenu { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 8, 14, .55); }
+#gamemenu .gm-panel { width: 320px; padding: 22px; background: rgba(14, 17, 26, .98);
+  border: 1px solid #c9b873; border-radius: 12px; text-align: center; }
+#gamemenu h2 { color: #f0d889; margin-bottom: 14px; letter-spacing: 1px; }
+.gm-btn { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 15px; cursor: pointer;
+  background: linear-gradient(#2d3450, #1c2138); color: #e8e2d0; border: 1px solid #3a3f55; border-radius: 8px; }
+.gm-btn:hover { border-color: #f0d889; color: #f0d889; }
+.gm-btn.gm-close { background: linear-gradient(#8a6d1f, #6b520f); color: #fff; border: none; }
+.gm-tip { margin-top: 12px; font-size: 11px; color: #707890; }
+
+/* Bandeau du mode édition */
+#ui-edit-banner { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 260;
+  display: flex; align-items: center; gap: 12px; max-width: 92vw;
+  padding: 8px 12px; background: rgba(14, 17, 26, .96); border: 1px solid #f0d889; border-radius: 10px;
+  color: #e8e2d0; font-size: 12px; }
+#ui-edit-banner button { padding: 6px 12px; background: #8a6d1f; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; }
+#ui-edit-banner button:hover { background: #a5832a; }
 </style>
 </head>
 <body>
@@ -262,7 +285,7 @@ canvas { display: block; }
       <button id="btn-respawn">Renaître à la capitale</button>
     </div>
 
-    <div id="help">ZQSD/WASD : déplacer · Espace : sauter · clic : cibler · R : attaque auto · 1-9 : compétences · E : PNJ · F : cible · I : inventaire · J : quêtes · M : son · U : reset UI · Entrée : chat · (glissez/redimensionnez les panneaux)</div>
+    <div id="help">ZQSD/WASD : déplacer · Espace : sauter · clic : cibler · R : attaque auto · 1-9 : compétences · E : PNJ · F : cible · I : inventaire · J : quêtes · M : son · Échap : menu / éditer l'interface · Entrée : chat</div>
   </div>
 
 <script type="module">
@@ -2751,25 +2774,32 @@ const Sound = {
   },
 };
 // ============================================================
-// Rend les panneaux du HUD déplaçables (glisser) et redimensionnables
-// (poignée en bas à droite). La disposition est mémorisée (localStorage).
+// Disposition de l'interface : les panneaux ne sont déplaçables /
+// redimensionnables QU'EN mode édition (déverrouillé via le menu Échap).
+// En quittant le mode édition, tout est verrouillé tel que placé.
+// La disposition est mémorisée (localStorage).
 // ============================================================
-const PANELS = ['selfframe', 'targetframe', 'fortframe', 'skillbar', 'grouppanel', 'log', 'questlog', 'inventory'];
+const PANELS = ['selfframe', 'targetframe', 'fortframe', 'skillbar', 'grouppanel', 'log', 'questlog', 'inventory', 'chatwrap'];
 const KEY = 'raw_ui';
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; } };
 const save = (d) => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch {} };
+
+let editMode = false;
+let menuEl = null, bannerEl = null;
+let onReset = null;
 
 function persist(el, id, state) {
   const r = el.getBoundingClientRect();
   state[id] = { l: Math.round(r.left), t: Math.round(r.top), w: el.offsetWidth, h: el.offsetHeight };
   save(state);
 }
-
 function setFixed(el) {
   const r = el.getBoundingClientRect();
   el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
   el.style.right = 'auto'; el.style.bottom = 'auto'; el.style.transform = 'none';
 }
+
+function isEditMode() { return editMode; }
 
 function setupMovableUI() {
   const state = load();
@@ -2785,10 +2815,9 @@ function setupMovableUI() {
       if (s.h) el.style.height = s.h + 'px';
     }
     el.addEventListener('pointerdown', (e) => {
-      // ne pas interférer avec les éléments interactifs
-      if (e.target.closest('button,input,.skill,.inv-item,.inv-slot,.cs-card,.dbtn')) return;
+      if (!editMode) return; // verrouillé hors mode édition
       const r = el.getBoundingClientRect();
-      // coin bas-droit = redimensionnement natif : on laisse faire, on persiste à la fin
+      // coin bas-droit = redimensionnement natif (on laisse faire, on persiste à la fin)
       if (e.clientX > r.right - 22 && e.clientY > r.bottom - 22) {
         const onUp = () => { removeEventListener('pointerup', onUp); persist(el, id, state); };
         addEventListener('pointerup', onUp);
@@ -2801,13 +2830,11 @@ function setupMovableUI() {
         el.style.left = Math.max(0, Math.min(innerWidth - 40, ev.clientX - ox)) + 'px';
         el.style.top = Math.max(0, Math.min(innerHeight - 24, ev.clientY - oy)) + 'px';
       };
-      const up = () => {
-        removeEventListener('pointermove', move); removeEventListener('pointerup', up);
-        persist(el, id, state);
-      };
+      const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); persist(el, id, state); };
       addEventListener('pointermove', move); addEventListener('pointerup', up);
     });
   }
+  buildMenu();
 }
 
 function resetUI() {
@@ -2817,6 +2844,58 @@ function resetUI() {
     if (!el) continue;
     for (const p of ['left', 'top', 'right', 'bottom', 'width', 'height', 'transform']) el.style[p] = '';
   }
+}
+
+function startEdit() {
+  editMode = true;
+  document.body.classList.add('ui-editing');
+  if (menuEl) menuEl.classList.add('hidden');
+  if (bannerEl) bannerEl.classList.remove('hidden');
+}
+function endEdit() {
+  editMode = false;
+  document.body.classList.remove('ui-editing');
+  if (bannerEl) bannerEl.classList.add('hidden');
+}
+function toggleMenu(force) {
+  if (!menuEl) return;
+  const show = force != null ? force : menuEl.classList.contains('hidden');
+  menuEl.classList.toggle('hidden', !show);
+}
+function isMenuOpen() { return menuEl && !menuEl.classList.contains('hidden'); }
+
+// touche Échap : ferme le menu/quitte l'édition, sinon ouvre le menu
+function onEscape() {
+  if (editMode) { endEdit(); return true; }
+  if (isMenuOpen()) { toggleMenu(false); return true; }
+  toggleMenu(true); return true;
+}
+function setResetHandler(fn) { onReset = fn; }
+
+function buildMenu() {
+  if (menuEl) return;
+  menuEl = document.createElement('div');
+  menuEl.id = 'gamemenu'; menuEl.className = 'hidden';
+  menuEl.innerHTML =
+    '<div class="gm-panel">' +
+    '<h2>Menu</h2>' +
+    '<button id="gm-edit" class="gm-btn">✋ Éditer l\'interface</button>' +
+    '<button id="gm-reset" class="gm-btn">↺ Réinitialiser l\'interface</button>' +
+    '<button id="gm-close" class="gm-btn gm-close">Reprendre</button>' +
+    '<p class="gm-tip">Astuce : Échap ouvre/ferme ce menu.</p>' +
+    '</div>';
+  document.body.appendChild(menuEl);
+  menuEl.addEventListener('pointerdown', (e) => { if (e.target === menuEl) toggleMenu(false); });
+
+  bannerEl = document.createElement('div');
+  bannerEl.id = 'ui-edit-banner'; bannerEl.className = 'hidden';
+  bannerEl.innerHTML = '<span>✋ Mode édition — déplacez et redimensionnez les panneaux (coin bas-droit). La fenêtre de chat est déplaçable.</span><button id="ui-edit-done">🔒 Terminer</button>';
+  document.body.appendChild(bannerEl);
+
+  document.getElementById('gm-edit').onclick = () => startEdit();
+  document.getElementById('gm-reset').onclick = () => { resetUI(); if (onReset) onReset(); };
+  document.getElementById('gm-close').onclick = () => toggleMenu(false);
+  document.getElementById('ui-edit-done').onclick = () => endEdit();
 }
 // ============================================================
 // Chargeur de modèles glTF/GLB avec animations + repli procédural.
@@ -3932,9 +4011,14 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyJ') ui.toggleQuestLog();
   if (e.code === 'KeyI') ui.toggleInventory();
   if (e.code === 'KeyU') { resetUI(); ui.log("Disposition de l'interface réinitialisée (U).", 'info'); }
+  setResetHandler(() => ui.log("Disposition de l'interface réinitialisée.", 'info'));
   if (e.code === 'KeyF') targetNearest();
   if (e.code === 'KeyE') interactNearest();
-  if (e.code === 'Escape') { setTarget(null); document.getElementById('dialog').classList.add('hidden'); }
+  if (e.code === 'Escape') {
+    const dlg = document.getElementById('dialog');
+    if (!dlg.classList.contains('hidden')) { dlg.classList.add('hidden'); }
+    else { onEscape(); }
+  }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
 

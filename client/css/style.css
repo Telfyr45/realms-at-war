@@ -151,7 +151,30 @@ canvas { display: block; }
 .inv-item:hover { background: #1d2238; }
 .inv-tip { margin-top: 10px; font-size: 11px; color: #707890; }
 
-/* ===== Panneaux déplaçables / redimensionnables ===== */
-.movable { resize: both; overflow: auto; min-width: 130px; min-height: 38px; pointer-events: auto; }
-.movable:hover { outline: 1px dashed rgba(240, 216, 137, .35); outline-offset: 2px; }
-#skillbar.movable { overflow: visible; resize: none; }
+/* ===== Disposition de l'interface (mode édition uniquement) ===== */
+/* Hors mode édition : les panneaux gardent leur comportement normal (verrouillés). */
+.ui-editing .movable { resize: both; overflow: auto; min-width: 130px; min-height: 38px;
+  pointer-events: auto !important; cursor: move; outline: 2px dashed rgba(240, 216, 137, .55); outline-offset: 2px; }
+.ui-editing #skillbar.movable { overflow: visible; resize: none; }
+.ui-editing #chatwrap.movable { background: rgba(15, 18, 30, .85); border: 1px solid #4a5070; border-radius: 6px; }
+.ui-editing #chatwrap.movable::before { content: 'Chat'; position: absolute; top: -16px; left: 4px; font-size: 10px; color: #f0d889; }
+
+/* Menu (Échap) */
+#gamemenu { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 8, 14, .55); }
+#gamemenu .gm-panel { width: 320px; padding: 22px; background: rgba(14, 17, 26, .98);
+  border: 1px solid #c9b873; border-radius: 12px; text-align: center; }
+#gamemenu h2 { color: #f0d889; margin-bottom: 14px; letter-spacing: 1px; }
+.gm-btn { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 15px; cursor: pointer;
+  background: linear-gradient(#2d3450, #1c2138); color: #e8e2d0; border: 1px solid #3a3f55; border-radius: 8px; }
+.gm-btn:hover { border-color: #f0d889; color: #f0d889; }
+.gm-btn.gm-close { background: linear-gradient(#8a6d1f, #6b520f); color: #fff; border: none; }
+.gm-tip { margin-top: 12px; font-size: 11px; color: #707890; }
+
+/* Bandeau du mode édition */
+#ui-edit-banner { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 260;
+  display: flex; align-items: center; gap: 12px; max-width: 92vw;
+  padding: 8px 12px; background: rgba(14, 17, 26, .96); border: 1px solid #f0d889; border-radius: 10px;
+  color: #e8e2d0; font-size: 12px; }
+#ui-edit-banner button { padding: 6px 12px; background: #8a6d1f; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 700; }
+#ui-edit-banner button:hover { background: #a5832a; }
